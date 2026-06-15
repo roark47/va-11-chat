@@ -1,0 +1,151 @@
+.admin-page {
+  align-items: flex-start;
+  padding-top: 24px;
+}
+
+.admin-page__content {
+  position: relative;
+}
+
+.admin-page__logout {
+  margin-bottom: 16px;
+}
+
+.admin-page__section {
+  margin-top: 40px;
+}
+
+.admin-page__create-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.admin-page__channel-list {
+  display: flex;
+  gap: 24px;
+  width: 100%;
+  margin: 0;
+  padding: 0 0 42px;
+  overflow-x: auto;
+  list-style: none;
+}
+
+.admin-page__channel-item {
+  min-width: 240px;
+  margin-bottom: 18px;
+}
+
+.admin-page__channel-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.admin-page__user-list {
+  margin: 24px 0 48px;
+  padding-left: 18px;
+}
+
+.admin-page__notice-form {
+  margin-top: 18px;
+}
+
+.admin-page__notice-control {
+  width: min(100%, 360px);
+  min-height: 72px;
+  resize: vertical;
+}
+
+.admin-page__user-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.admin-page__user-name {
+  font-weight: 700;
+}
+
+.admin-page__compact-button {
+  min-height: 26px;
+  padding: 2px 8px;
+  font-size: 0.68rem;
+}
+
+.admin-page__user-control {
+  width: min(80%, 280px);
+}
+
+.admin-page__modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: color-mix(in srgb, Canvas 82%, transparent);
+}
+
+.admin-page__modal {
+  width: min(100%, 360px);
+  border: 1px solid CanvasText;
+  background: Canvas;
+  color: CanvasText;
+  padding: 18px;
+}
+
+.admin-page__modal-title {
+  margin-top: 0;
+}
+
+.admin-page__modal-copy {
+  margin: 18px 0;
+}
+
+.admin-page__modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+@media (min-width: 641px) {
+  .admin-page {
+    min-height: auto;
+    align-items: flex-start;
+    padding-top: 0;
+  }
+
+  .admin-page__logout {
+    position: absolute;
+    top: 0;
+    right: 0;
+  }
+
+  .admin-page__section {
+    margin-top: 48px;
+  }
+
+  .admin-page__create-field {
+    flex-direction: row;
+    align-items: flex-end;
+  }
+
+  .admin-page__channel-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .admin-page__user-item {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+}

@@ -1,0 +1,14 @@
+services:
+  va-11-chat:
+    build: .
+    image: va-11-chat:latest
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    ports:
+      - "3000:3000"
+    volumes:
+      - va-11-data:/app/data
+
+volumes:
+  va-11-data:

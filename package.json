@@ -1,0 +1,59 @@
+{
+  "name": "va-11-chat",
+  "version": "1.0.0",
+  "description": "A relaxed TypeScript WebSocket chat room with local encrypted file storage.",
+  "license": "MIT",
+  "type": "module",
+  "keywords": [
+    "chat",
+    "websocket",
+    "typescript",
+    "express",
+    "ws"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx src/server.ts",
+    "build": "npm run build:server && npm run build:client",
+    "build:server": "tsc -p tsconfig.server.json",
+    "build:client": "vite build",
+    "start": "node dist/server.js",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "test": "npm run build && vitest run",
+    "test:watch": "vitest",
+    "commitlint": "commitlint --from HEAD~1 --to HEAD --verbose"
+  },
+  "dependencies": {
+    "cookie": "^0.7.2",
+    "express": "^4.21.2",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^21.0.2",
+    "@commitlint/config-conventional": "^21.0.2",
+    "@eslint/js": "^10.0.1",
+    "@types/cookie": "^0.6.0",
+    "@types/express": "^4.17.25",
+    "@types/node": "^22.10.5",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@types/ws": "^8.5.13",
+    "@vitejs/plugin-react": "^6.0.2",
+    "eslint": "^10.5.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.6.0",
+    "prettier": "^3.8.4",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.61.0",
+    "vite": "^8.0.16",
+    "vitest": "^4.1.8"
+  }
+}

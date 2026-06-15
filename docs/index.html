@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="VA-11 Chat is a small WebSocket chat room for relaxed, candid conversation."
+    />
+    <title>VA-11 Chat</title>
+    <link rel="icon" type="image/png" href="./assets/favicon.png" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="VA-11 Chat home">
+        <img src="./assets/logo.png" alt="" width="40" height="40" />
+        <span>VA-11 Chat</span>
+      </a>
+      <nav class="site-nav" aria-label="Primary navigation">
+        <a href="#features">Features</a>
+        <a href="#docs">Docs</a>
+        <a href="#deploy">Deploy</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="hero__copy">
+          <p class="eyebrow">small-room websocket chat</p>
+          <h1>VA-11 Chat</h1>
+          <p>
+            A quiet, self-hosted chat room for people who want a place to slow down, speak plainly,
+            and keep the interface out of the conversation.
+          </p>
+          <div class="hero__actions" aria-label="Project links">
+            <a class="button button--primary" href="#features">Explore</a>
+            <a class="button" href="#docs">Start locally</a>
+          </div>
+        </div>
+        <div class="hero__mark" aria-label="VA-11 Chat logo">
+          <img src="./assets/logo.png" alt="" />
+        </div>
+      </section>
+
+      <section class="band band--intro">
+        <div class="content-grid">
+          <div>
+            <p class="eyebrow">why the name</p>
+            <h2>A place with bar-counter energy</h2>
+          </div>
+          <p>
+            VA-11 Chat takes inspiration from the mood of VA-11: late-night warmth, unhurried
+            messages, and a small venue where people can say what they mean. The app keeps the stack
+            simple so the room stays easy to understand, run, and trust.
+          </p>
+        </div>
+      </section>
+
+      <section id="features" class="section">
+        <div class="section__heading">
+          <p class="eyebrow">what it does</p>
+          <h2>Focused on the room, not the machinery</h2>
+        </div>
+        <div class="feature-grid">
+          <article>
+            <h3>Channel rooms</h3>
+            <p>Create channels and per-channel users from a small admin page.</p>
+          </article>
+          <article>
+            <h3>Native realtime chat</h3>
+            <p>Messages move over WebSocket connections without a hosted database.</p>
+          </article>
+          <article>
+            <h3>Encrypted history</h3>
+            <p>Recent messages are encrypted at rest with AES-256-GCM.</p>
+          </article>
+          <article>
+            <h3>Small deployment</h3>
+            <p>Run one Node.js process with local JSON and JSONL storage.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="docs" class="band">
+        <div class="section__heading">
+          <p class="eyebrow">basic docs</p>
+          <h2>Run it locally</h2>
+        </div>
+        <div class="terminal">
+          <pre><code>npm install
+cp .env.example .env
+ADMIN_PASSWORD=change-me COOKIE_SECRET=dev-cookie-secret MESSAGE_SECRET=dev-message-secret npm run dev</code></pre>
+        </div>
+        <div class="doc-grid">
+          <div>
+            <h3>Open</h3>
+            <p>User login: <code>http://localhost:3000/</code></p>
+            <p>Admin page: <code>http://localhost:3000/admin</code></p>
+          </div>
+          <div>
+            <h3>Configure</h3>
+            <p>
+              Set <code>ADMIN_PASSWORD</code>, <code>COOKIE_SECRET</code>, and
+              <code>MESSAGE_SECRET</code> before production use.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="deploy" class="section">
+        <div class="content-grid">
+          <div>
+            <p class="eyebrow">deployment</p>
+            <h2>Use a long-running Node host</h2>
+          </div>
+          <p>
+            VA-11 Chat uses native WebSockets, so deploy it to a platform that supports persistent
+            Node.js processes, such as a VPS or Render. If you keep local file storage in
+            production, attach persistent disk storage and run a single instance.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <span>VA-11 Chat</span>
+      <a href="#docs">Docs</a>
+      <a href="#deploy">Deploy</a>
+    </footer>
+  </body>
+</html>
