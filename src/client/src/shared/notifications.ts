@@ -23,25 +23,64 @@ export function saveNotificationPreference(enabled: boolean): void {
 
 export async function requestNotificationPermission(): Promise<boolean> {
   if (!("Notification" in window)) return false;
-  if (Notification.permission === "default") {
-    await Notification.requestPermission();
-  }
+  try {
+    if (Notification.permission === "default") {
+      await Notification.requestPermission();
+    }
 
-  return Notification.permission === "granted";
+    if (Notification.permission !== "granted") return false;
+    await registerNotificationWorker();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-export function notifyIncomingMessage(
+async function registerNotificationWorker(): Promise<ServiceWorkerRegistration | null> {
+  if (!("serviceWorker" in navigator) || !window.isSecureContext) return null;
+
+  try {
+    return await navigator.serviceWorker.register("/notification-worker.js");
+  } catch {
+    // Desktop browsers can still use the Notification constructor as a fallback.
+    return null;
+  }
+}
+
+export async function notifyIncomingMessage(
   message: ChatMessage,
   currentUserId: string,
   enabled: boolean,
-): void {
+): Promise<void> {
   if (!enabled) return;
   if (!("Notification" in window)) return;
   if (message.userId === currentUserId) return;
   if (Notification.permission !== "granted") return;
 
-  new Notification(message.nickname, {
+  const options: NotificationOptions = {
     body: message.text,
-    tag: "chat-message",
-  });
+    data: { url: window.location.href },
+    icon: "/logo.png",
+    tag: `chat-message-${message.userId}-${message.time}`,
+  };
+
+  const registration = await registerNotificationWorker();
+  if (registration) {
+    try {
+      await registration.showNotification(message.nickname, options);
+      return;
+    } catch {
+      // Fall through for browsers that expose service workers but reject notifications.
+    }
+  }
+
+  try {
+    const notification = new Notification(message.nickname, options);
+    notification.onclick = () => {
+      window.focus();
+      notification.close();
+    };
+  } catch {
+    // Unsupported notification implementations should not interrupt incoming messages.
+  }
 }

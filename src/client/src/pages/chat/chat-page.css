@@ -94,6 +94,7 @@
 }
 
 .chat-page__message {
+  min-width: 0;
   max-width: 88%;
   border: 1px solid rgba(42, 49, 68, 0.88);
   border-radius: 8px;
@@ -167,6 +168,9 @@
   font-family: var(--font-ui);
   font-size: 1rem;
   line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 :root[data-theme="minimal"] .chat-page__message-text {

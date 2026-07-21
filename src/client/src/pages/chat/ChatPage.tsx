@@ -48,7 +48,7 @@ export function ChatPage({ channelId }: ChatPageProps) {
       if (payload.type === "history") setMessages(payload.messages);
       if (payload.type === "message") {
         setMessages((current) => [...current, payload]);
-        notifyIncomingMessage(payload, session.user.id, notificationsEnabledRef.current);
+        void notifyIncomingMessage(payload, session.user.id, notificationsEnabledRef.current);
       }
       if (payload.type === "error") setError(payload.message);
     });
@@ -81,6 +81,11 @@ export function ChatPage({ channelId }: ChatPageProps) {
 
     const allowed = await requestNotificationPermission();
     setNotificationSwitch(allowed);
+    setError(
+      allowed
+        ? ""
+        : "Browser notifications are blocked. Allow them in the site settings and try again.",
+    );
   }
 
   function setNotificationSwitch(enabled: boolean) {
