@@ -21,6 +21,7 @@ export type ChatSession = {
 
 export type ChatMessage = {
   type: "message";
+  id?: string;
   userId: string;
   nickname: string;
   text: string;

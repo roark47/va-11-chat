@@ -44,6 +44,18 @@
   text-shadow: 0 0 14px rgba(255, 194, 103, 0.24);
 }
 
+.form-page__remember {
+  font-size: 0.82rem;
+}
+
+.form-page__remember input {
+  width: 15px;
+  height: 15px;
+  margin: 0 6px 0 0;
+  accent-color: var(--color-cyan);
+  vertical-align: -2px;
+}
+
 :root[data-theme="minimal"] .form-page__field strong {
   color: CanvasText;
   text-shadow: none;

@@ -27,6 +27,7 @@ export type Session = {
 
 export type ChatMessage = {
   type: "message";
+  id?: string;
   userId: string;
   nickname: string;
   text: string;
@@ -38,6 +39,7 @@ export type AuthedSocket = WebSocket & {
   userId?: string;
   nickname?: string;
   rateLimitKey?: string;
+  isAlive?: boolean;
 };
 
 export type RateLimitBucket = {

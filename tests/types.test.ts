@@ -25,6 +25,7 @@ test("chat domain types require the fields used by storage and sessions", () => 
   expectTypeOf<ChannelsFile>().toMatchTypeOf<{ channels: StoredChannel[] }>();
   expectTypeOf<ChatMessage>().toMatchTypeOf<{
     type: "message";
+    id?: string;
     userId: string;
     nickname: string;
     text: string;
@@ -40,4 +41,5 @@ test("connection helper types model signed sessions and rate buckets", () => {
   expectTypeOf<RateLimitBucket>().toMatchTypeOf<{ count: number; resetAt: number }>();
   expectTypeOf<AuthedSocket>().toHaveProperty("channelId").toEqualTypeOf<string | undefined>();
   expectTypeOf<AuthedSocket>().toHaveProperty("rateLimitKey").toEqualTypeOf<string | undefined>();
+  expectTypeOf<AuthedSocket>().toHaveProperty("isAlive").toEqualTypeOf<boolean | undefined>();
 });

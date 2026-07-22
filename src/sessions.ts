@@ -30,7 +30,15 @@ export function getSessionFromCookie(header: string | undefined): Session | null
   return decodeSession(parsed[sessionCookieName]);
 }
 
-export function setSessionCookie(res: express.Response, session: Session): void {
+type SessionCookieOptions = {
+  maxAgeSeconds?: number;
+};
+
+export function setSessionCookie(
+  res: express.Response,
+  session: Session,
+  options: SessionCookieOptions = { maxAgeSeconds: 60 * 60 * 24 * 7 },
+): void {
   res.setHeader(
     "Set-Cookie",
     cookie.serialize(sessionCookieName, encodeSession(session), {
@@ -38,7 +46,7 @@ export function setSessionCookie(res: express.Response, session: Session): void 
       sameSite: "lax",
       secure: isProduction,
       path: "/",
-      maxAge: 60 * 60 * 24 * 7,
+      ...(options.maxAgeSeconds ? { maxAge: options.maxAgeSeconds } : {}),
     }),
   );
 }

@@ -55,6 +55,26 @@ test("getSessionFromCookie rejects tampered signatures", () => {
   assert.equal(getSessionFromCookie(tampered), null);
 });
 
+test("setSessionCookie can create a browser-session cookie", () => {
+  let setCookie = "";
+  setSessionCookie(
+    {
+      setHeader(_name: string, value: string) {
+        setCookie = value;
+      },
+    } as never,
+    { role: "user", channelId: "room", userId: "user_1" },
+    { maxAgeSeconds: undefined },
+  );
+
+  assert.doesNotMatch(setCookie, /Max-Age/);
+  assert.deepEqual(getSessionFromCookie(cookieValue(setCookie)), {
+    role: "user",
+    channelId: "room",
+    userId: "user_1",
+  });
+});
+
 test("clearSessionCookie expires the session and isAdmin checks the signed role", () => {
   let setCookie = "";
   clearSessionCookie({

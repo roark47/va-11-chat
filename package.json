@@ -1,6 +1,6 @@
 {
   "name": "va-11-chat",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A relaxed TypeScript WebSocket chat room with local encrypted file storage.",
   "license": "MIT",
   "type": "module",

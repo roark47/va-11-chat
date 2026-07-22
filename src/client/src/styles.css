@@ -180,6 +180,44 @@ hr {
   backdrop-filter: blur(10px);
 }
 
+.install-app {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.install-app__button {
+  min-height: 24px;
+  padding: 2px 8px;
+  border-color: rgba(255, 194, 103, 0.45);
+  color: var(--color-amber);
+  font-size: 0.62rem;
+}
+
+.install-app__help {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 10;
+  width: min(250px, 80vw);
+  border: 1px solid var(--color-line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: var(--color-surface-strong);
+  color: var(--color-text);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.34);
+  font-family: var(--font-terminal);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+:root[data-theme="minimal"] .install-app__help {
+  border-radius: 0;
+  background: Canvas;
+  color: CanvasText;
+  box-shadow: none;
+}
+
 :root[data-theme="minimal"] .theme-toggle {
   border-color: ButtonText;
   background: Canvas;

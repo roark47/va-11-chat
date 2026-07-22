@@ -3,6 +3,9 @@ import { createRoot } from "react-dom/client";
 import { AdminRoute } from "./pages/admin/AdminPage";
 import { ChatPage } from "./pages/chat/ChatPage";
 import { LoginPage } from "./pages/login/LoginPage";
+import { registerAppServiceWorker } from "./shared/service-worker-registration";
+import { getJson } from "./api";
+import type { RedirectResponse } from "./shared/types";
 import "./styles.css";
 
 type Theme = "cyberpunk" | "minimal";
@@ -47,7 +50,7 @@ function ThemeToggle() {
 export function App() {
   const pathname = window.location.pathname;
 
-  let page = <LoginPage />;
+  let page = <EntryPage />;
 
   if (pathname.startsWith("/admin")) page = <AdminRoute />;
   if (pathname.startsWith("/chat/")) {
@@ -61,6 +64,32 @@ export function App() {
     </>
   );
 }
+
+function EntryPage() {
+  const [checkingSession, setCheckingSession] = useState(true);
+
+  useEffect(() => {
+    getJson<RedirectResponse>("/api/session")
+      .then((result) => window.location.replace(result.redirectTo))
+      .catch(() => setCheckingSession(false));
+  }, []);
+
+  if (checkingSession) {
+    return (
+      <main className="form-page">
+        <div className="form-page__content">
+          <p className="form-page__status form-page__status--notice" role="status">
+            Finding your seat...
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  return <LoginPage />;
+}
+
+registerAppServiceWorker();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

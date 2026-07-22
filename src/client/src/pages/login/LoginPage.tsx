@@ -32,6 +32,7 @@ export function LoginPage({ fixedChannelId = "" }: LoginPageProps) {
       const result = await postForm<RedirectResponse>("/api/login", {
         channelId: String(form.get("channelId") ?? ""),
         password: String(form.get("password") ?? ""),
+        remember: form.get("remember") === "on" ? "1" : "",
       });
       window.location.href = result.redirectTo;
     } catch (err) {
@@ -72,6 +73,12 @@ export function LoginPage({ fixedChannelId = "" }: LoginPageProps) {
               Whisper the house password
               <br />
               <input className="form-page__control" name="password" type="password" required />
+            </label>
+          </p>
+          <p className="form-page__field form-page__remember">
+            <label className="form-page__label">
+              <input name="remember" type="checkbox" defaultChecked /> Keep this seat on this device
+              for 30 days
             </label>
           </p>
           <button className="form-page__button button--primary" type="submit">

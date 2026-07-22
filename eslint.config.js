@@ -26,6 +26,12 @@ export default tseslint.config(
     },
   },
   {
+    files: ["src/client/public/*.js"],
+    languageOptions: {
+      globals: globals.serviceworker,
+    },
+  },
+  {
     files: ["src/**/*.ts", "tests/**/*.ts", "*.config.ts", "*.config.js"],
     languageOptions: {
       globals: {

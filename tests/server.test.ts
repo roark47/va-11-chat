@@ -196,6 +196,9 @@ test("adds security headers and rate-limits repeated login failures", async () =
 test("json api supports browser click actions", async () => {
   const { baseUrl, dataDir } = await startServer();
 
+  const anonymousSession = await fetch(`${baseUrl}/api/session`);
+  assert.equal(anonymousSession.status, 401);
+
   const blockedCreate = await postForm(baseUrl, "/api/admin/channels", { name: "No Key" });
   assert.equal(blockedCreate.status, 403);
 
@@ -240,11 +243,19 @@ test("json api supports browser click actions", async () => {
   const userLogin = await postForm(baseUrl, "/api/login", {
     channelId: "api-room",
     password: "dana-pass",
+    remember: "1",
   });
   assert.equal(userLogin.status, 200);
   assert.deepEqual(await userLogin.json(), { redirectTo: "/chat/api-room" });
+  assert.match(userLogin.headers.get("set-cookie") ?? "", /Max-Age=2592000/);
   const userCookie = setCookieHeader(userLogin);
   assert.ok(userCookie);
+
+  const resumedSession = await fetch(`${baseUrl}/api/session`, {
+    headers: { cookie: userCookie },
+  });
+  assert.equal(resumedSession.status, 200);
+  assert.deepEqual(await resumedSession.json(), { redirectTo: "/chat/api-room" });
 
   const chatSession = await fetch(`${baseUrl}/api/chat/api-room`, {
     headers: { cookie: userCookie },
@@ -433,6 +444,7 @@ test("stores chat messages encrypted and reads them back through websocket histo
     (message) => message.type === "message" && message.text === plaintext,
   );
   assert.equal(broadcast.nickname, "Alice");
+  assert.match(String(broadcast.id), /^message_/);
   assert.equal(typeof broadcast.userId, "string");
   firstSocket.close();
 
@@ -459,6 +471,28 @@ test("stores chat messages encrypted and reads them back through websocket histo
   assert.equal(restoredMessages[0]?.nickname, "Alice");
   assert.equal(restoredMessages[0]?.userId, broadcast.userId);
   assert.equal(restoredMessages[0]?.text, plaintext);
+});
+
+test("serves installable PWA metadata and service worker", async () => {
+  const { baseUrl } = await startServer();
+
+  const manifest = await fetch(`${baseUrl}/manifest.webmanifest`);
+  assert.equal(manifest.status, 200);
+  const manifestJson = (await manifest.json()) as {
+    start_url: string;
+    display: string;
+    icons: Array<{ sizes: string }>;
+  };
+  assert.equal(manifestJson.start_url, "/?source=pwa");
+  assert.equal(manifestJson.display, "standalone");
+  assert.deepEqual(
+    manifestJson.icons.map((icon) => icon.sizes),
+    ["192x192", "512x512"],
+  );
+
+  const worker = await fetch(`${baseUrl}/service-worker.js`);
+  assert.equal(worker.status, 200);
+  assert.match(await worker.text(), /notificationclick/);
 });
 
 test("rate-limits websocket messages", async () => {

@@ -1,0 +1,23 @@
+{
+  "id": "/",
+  "name": "VA-11 Chat",
+  "short_name": "VA-11 Chat",
+  "description": "A quiet, private place to chat.",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#070912",
+  "theme_color": "#070912",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

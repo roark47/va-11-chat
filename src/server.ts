@@ -266,6 +266,29 @@ app.get("/api/chat/:channelId", async (req, res, next) => {
   }
 });
 
+app.get("/api/session", async (req, res, next) => {
+  try {
+    const session = getSessionFromCookie(req.headers.cookie);
+    if (session?.role !== "user" || !session.channelId || !session.userId) {
+      res.status(401).send("No active seat");
+      return;
+    }
+
+    const data = await readChannels();
+    const channel = data.channels.find((item) => item.id === session.channelId);
+    const user = channel?.users.find((item) => item.id === session.userId);
+    if (!channel || !user) {
+      clearSessionCookie(res);
+      res.status(401).send("That seat is no longer available");
+      return;
+    }
+
+    res.json({ redirectTo: `/chat/${encodeURIComponent(channel.id)}` });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/login", async (req, res, next) => {
   try {
     if (rateLimitLogin(req, res)) return;
@@ -280,12 +303,18 @@ app.post("/api/login", async (req, res, next) => {
     }
 
     const { channel, user } = result.value;
-    setSessionCookie(res, {
-      role: "user",
-      channelId: channel.id,
-      userId: user.id,
-      nickname: user.nickname,
-    });
+    setSessionCookie(
+      res,
+      {
+        role: "user",
+        channelId: channel.id,
+        userId: user.id,
+        nickname: user.nickname,
+      },
+      String(req.body.remember ?? "") === "1"
+        ? { maxAgeSeconds: 60 * 60 * 24 * 30 }
+        : { maxAgeSeconds: undefined },
+    );
     res.json({ redirectTo: `/chat/${encodeURIComponent(channel.id)}` });
   } catch (error) {
     next(error);
@@ -559,6 +588,10 @@ wss.on("connection", async (ws: AuthedSocket) => {
   }
 
   const sockets = channelSockets.get(channelId) ?? new Set<AuthedSocket>();
+  ws.isAlive = true;
+  ws.on("pong", () => {
+    ws.isAlive = true;
+  });
   sockets.add(ws);
   channelSockets.set(channelId, sockets);
 
@@ -597,6 +630,7 @@ wss.on("connection", async (ws: AuthedSocket) => {
 
     const message: ChatMessage = {
       type: "message",
+      id: randomId("message"),
       userId,
       nickname,
       text,
@@ -617,6 +651,21 @@ wss.on("connection", async (ws: AuthedSocket) => {
     if (current?.size === 0) channelSockets.delete(channelId);
   });
 });
+
+const websocketHeartbeat = setInterval(() => {
+  for (const client of wss.clients as Set<AuthedSocket>) {
+    if (client.readyState !== client.OPEN) continue;
+
+    if (client.isAlive === false) {
+      client.terminate();
+      continue;
+    }
+
+    client.isAlive = false;
+    client.ping();
+  }
+}, 30_000);
+websocketHeartbeat.unref();
 
 async function configureFrontend(): Promise<void> {
   if (!isProduction && process.env.NODE_ENV !== "test") {

@@ -32,6 +32,7 @@ freely without the product getting in the way.
 - Admin web page for creating channels and channel users
 - Password-based user login per channel
 - Real-time chat over the native WebSocket protocol
+- Automatic WebSocket reconnection and history recovery after network or app suspension
 - Channel-isolated messages
 - Nickname + message display
 - Browser notifications for messages from other users
@@ -39,6 +40,21 @@ freely without the product getting in the way.
 - Keeps the latest 100 messages per channel
 - No database, ORM, or component library
 - Responsive layout for desktop and mobile browsers
+- Installable PWA that resumes the last signed-in room from the home screen
+
+## Home screen use
+
+On the first sign-in, users can keep their seat on the current device for 30 days. From the chat
+room, choose **Install app**; on iPhone, use **Add to Home Screen** from the system share sheet.
+Future launches from the home-screen icon validate the device session and open the last room
+directly, without requiring the room URL or password again.
+
+The device session uses an `HttpOnly` cookie. Plaintext passwords are never stored in
+`localStorage`, and **Leave the seat** clears the session immediately.
+
+> Notifications currently require the page to remain active enough to receive WebSocket events.
+> Reliable notifications while the operating system fully suspends the app require a Web Push
+> backend.
 
 ## Tech Stack
 

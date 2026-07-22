@@ -40,7 +40,7 @@ async function registerNotificationWorker(): Promise<ServiceWorkerRegistration |
   if (!("serviceWorker" in navigator) || !window.isSecureContext) return null;
 
   try {
-    return await navigator.serviceWorker.register("/notification-worker.js");
+    return await navigator.serviceWorker.register("/service-worker.js");
   } catch {
     // Desktop browsers can still use the Notification constructor as a fallback.
     return null;
