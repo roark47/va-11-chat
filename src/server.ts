@@ -4,22 +4,25 @@ import express from "express";
 import { WebSocketServer } from "ws";
 import {
   adminPassword,
+  defaultMaxSeats,
   isProduction,
+  maxMaxSeats,
   maxMessageLength,
+  maxNicknameLength,
   messageRateLimitMax,
   messageRateLimitWindowMs,
+  minMaxSeats,
   port,
   projectRoot,
   requireProductionSecrets,
 } from "./config.js";
-import { randomId, hashPassword, verifyPassword } from "./passwords.js";
+import { isPatronFaceId, resolvePatronFaceId, type PatronFaceId } from "./avatars.js";
+import { randomId } from "./passwords.js";
 import { clientIp, isRateLimited, rateLimitLogin } from "./rate-limit.js";
 import { clearSessionCookie, getSessionFromCookie, isAdmin, setSessionCookie } from "./sessions.js";
 import {
-  decryptPasswordForAdminCopy,
   deleteHistory,
   ensureDataFiles,
-  encryptPasswordForAdminCopy,
   migratePlaintextMessages,
   readChannels,
   readHistory,
@@ -33,13 +36,13 @@ import type {
   StoredChannel,
   StoredUser,
 } from "./types.js";
-import { slugify } from "./utils.js";
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
 const channelSockets = new Map<string, Set<AuthedSocket>>();
 const messageRateLimits = new Map<string, RateLimitBucket>();
+const channelJoinLocks = new Map<string, Promise<unknown>>();
 
 app.set("trust proxy", 1);
 app.use(express.urlencoded({ extended: false }));
@@ -59,45 +62,127 @@ app.use("/api", (_req, res, next) => {
 
 type ActionResult<T> = { ok: true; value: T } | { ok: false; status: number; message: string };
 
-async function authenticateChatUser(
-  channelId: string,
-  password: string,
-): Promise<ActionResult<{ channel: StoredChannel; user: StoredUser }>> {
-  const data = await readChannels();
-  const channel = data.channels.find((item) => item.id === channelId);
-  if (!channel) {
-    return { ok: false, status: 401, message: "That drink is not on tonight's board" };
+function normalizeNickname(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function parseMaxSeats(raw: unknown, fallback = defaultMaxSeats): ActionResult<number> {
+  if (raw === undefined || raw === null || raw === "") {
+    return { ok: true, value: fallback };
   }
 
-  for (const user of channel.users) {
-    if (await verifyPassword(password, user.passwordHash)) {
-      return { ok: true, value: { channel, user } };
+  const value = Number(raw);
+  if (!Number.isFinite(value) || !Number.isInteger(value)) {
+    return {
+      ok: false,
+      status: 400,
+      message: `Seat limit must be a whole number between ${minMaxSeats} and ${maxMaxSeats}`,
+    };
+  }
+
+  if (value < minMaxSeats || value > maxMaxSeats) {
+    return {
+      ok: false,
+      status: 400,
+      message: `Seat limit must be between ${minMaxSeats} and ${maxMaxSeats}`,
+    };
+  }
+
+  return { ok: true, value };
+}
+
+function validateNickname(nicknameInput: string): ActionResult<string> {
+  const nickname = nicknameInput.trim();
+  if (!nickname) {
+    return { ok: false, status: 400, message: "Pick a nickname before taking a seat" };
+  }
+
+  if (nickname.length > maxNicknameLength) {
+    return {
+      ok: false,
+      status: 400,
+      message: `Keep the nickname to ${maxNicknameLength} characters or fewer`,
+    };
+  }
+
+  if (
+    Array.from(nickname).some((char) => {
+      const code = char.charCodeAt(0);
+      return code <= 0x1f || code === 0x7f;
+    })
+  ) {
+    return {
+      ok: false,
+      status: 400,
+      message: "That nickname has characters the bar will not pour",
+    };
+  }
+
+  return { ok: true, value: nickname };
+}
+
+function countOnline(channelId: string, exceptUserId?: string): number {
+  const ids = new Set<string>();
+  for (const client of channelSockets.get(channelId) ?? []) {
+    if (client.userId && client.userId !== exceptUserId) {
+      ids.add(client.userId);
     }
   }
+  return ids.size;
+}
 
-  return { ok: false, status: 401, message: "The house password did not open this seat" };
+function isUserOnline(channelId: string, userId: string): boolean {
+  for (const client of channelSockets.get(channelId) ?? []) {
+    if (client.userId === userId) return true;
+  }
+  return false;
+}
+
+async function withChannelLock<T>(channelId: string, fn: () => Promise<T>): Promise<T> {
+  const previous = channelJoinLocks.get(channelId) ?? Promise.resolve();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const current = previous.catch(() => undefined).then(() => gate);
+  channelJoinLocks.set(channelId, current);
+
+  await previous.catch(() => undefined);
+  try {
+    return await fn();
+  } finally {
+    release();
+    if (channelJoinLocks.get(channelId) === current) {
+      channelJoinLocks.delete(channelId);
+    }
+  }
 }
 
 async function createChannel(
   nameInput: string,
   noticeInput = "",
+  maxSeatsInput: unknown = defaultMaxSeats,
 ): Promise<ActionResult<StoredChannel>> {
   const name = nameInput.trim();
   if (!name) {
     return { ok: false, status: 400, message: "The board needs a drink name" };
   }
 
+  const seats = parseMaxSeats(maxSeatsInput, defaultMaxSeats);
+  if (!seats.ok) return seats;
+
   const data = await readChannels();
-  const baseId = slugify(name) || randomId("channel");
-  let id = baseId;
-  let suffix = 2;
-  while (data.channels.some((channel) => channel.id === id)) {
-    id = `${baseId}-${suffix}`;
-    suffix += 1;
+  if (data.channels.some((channel) => channel.name.trim().toLowerCase() === name.toLowerCase())) {
+    return { ok: false, status: 400, message: "That drink is already on tonight's board" };
   }
 
-  const notice = noticeInput.trim();
-  const channel: StoredChannel = { id, name, ...(notice ? { notice } : {}), users: [] };
+  const channel: StoredChannel = {
+    id: randomId("room"),
+    name,
+    maxSeats: seats.value,
+    ...(noticeInput.trim() ? { notice: noticeInput.trim() } : {}),
+    users: [],
+  };
   data.channels.push(channel);
   await writeChannels(data);
   return { ok: true, value: channel };
@@ -124,15 +209,12 @@ async function updateChannelNotice(
   return { ok: true, value: channel };
 }
 
-async function addChannelUser(
+async function updateChannelMaxSeats(
   channelId: string,
-  nicknameInput: string,
-  password: string,
-): Promise<ActionResult<StoredUser>> {
-  const nickname = nicknameInput.trim();
-  if (!nickname || !password) {
-    return { ok: false, status: 400, message: "Guest handle and house password are required" };
-  }
+  maxSeatsInput: unknown,
+): Promise<ActionResult<StoredChannel>> {
+  const seats = parseMaxSeats(maxSeatsInput);
+  if (!seats.ok) return seats;
 
   const data = await readChannels();
   const channel = data.channels.find((item) => item.id === channelId);
@@ -140,15 +222,79 @@ async function addChannelUser(
     return { ok: false, status: 404, message: "That drink is not on tonight's board" };
   }
 
-  const user = {
-    id: randomId("user"),
-    nickname,
-    passwordHash: await hashPassword(password),
-    encryptedPassword: encryptPasswordForAdminCopy(password),
-  };
-  channel.users.push(user);
+  channel.maxSeats = seats.value;
   await writeChannels(data);
-  return { ok: true, value: user };
+  return { ok: true, value: channel };
+}
+
+function parseAvatar(input: unknown): ActionResult<PatronFaceId | undefined> {
+  const value = String(input ?? "").trim();
+  if (!value) return { ok: true, value: undefined };
+  if (!isPatronFaceId(value)) {
+    return { ok: false, status: 400, message: "Pick one of the faces at the counter" };
+  }
+  return { ok: true, value };
+}
+
+async function joinChannel(
+  channelId: string,
+  nicknameInput: string,
+  avatarInput: unknown,
+): Promise<ActionResult<{ channel: StoredChannel; user: StoredUser; online: number }>> {
+  const nicknameResult = validateNickname(nicknameInput);
+  if (!nicknameResult.ok) return nicknameResult;
+  const avatarResult = parseAvatar(avatarInput);
+  if (!avatarResult.ok) return avatarResult;
+
+  return withChannelLock(channelId, async () => {
+    const data = await readChannels();
+    const channel = data.channels.find((item) => item.id === channelId);
+    if (!channel) {
+      return { ok: false, status: 404, message: "That room link is not on tonight's board" };
+    }
+
+    const nickname = nicknameResult.value;
+    const avatar = avatarResult.value;
+    const normalized = normalizeNickname(nickname);
+    const existing = channel.users.find((user) => normalizeNickname(user.nickname) === normalized);
+
+    if (existing && isUserOnline(channel.id, existing.id)) {
+      return {
+        ok: false,
+        status: 400,
+        message: "That nickname is already seated at this counter",
+      };
+    }
+
+    const online = countOnline(channel.id, existing?.id);
+    if (online >= channel.maxSeats) {
+      return {
+        ok: false,
+        status: 403,
+        message: `The room is full (${online}/${channel.maxSeats})`,
+      };
+    }
+
+    let user = existing;
+    let dirty = false;
+    if (!user) {
+      user = { id: randomId("user"), nickname, ...(avatar ? { avatar } : {}) };
+      channel.users.push(user);
+      dirty = true;
+    } else {
+      if (user.nickname !== nickname) {
+        user.nickname = nickname;
+        dirty = true;
+      }
+      if (avatar && user.avatar !== avatar) {
+        user.avatar = avatar;
+        dirty = true;
+      }
+    }
+    if (dirty) await writeChannels(data);
+
+    return { ok: true, value: { channel, user, online } };
+  });
 }
 
 async function deleteChannel(channelId: string): Promise<ActionResult<StoredChannel>> {
@@ -205,10 +351,45 @@ function closeUserSockets(channelId: string, userId: string): void {
   if (sockets.size === 0) channelSockets.delete(channelId);
 }
 
-app.get("/api/channels", async (_req, res, next) => {
+function roomSummary(channel: StoredChannel) {
+  const online = countOnline(channel.id);
+  return {
+    id: channel.id,
+    name: channel.name,
+    notice: channel.notice ?? "",
+    maxSeats: channel.maxSeats,
+    onlineCount: online,
+  };
+}
+
+function setUserSession(
+  res: express.Response,
+  channel: StoredChannel,
+  user: StoredUser,
+  remember: boolean,
+): void {
+  setSessionCookie(
+    res,
+    {
+      role: "user",
+      channelId: channel.id,
+      userId: user.id,
+      nickname: user.nickname,
+    },
+    remember ? { maxAgeSeconds: 60 * 60 * 24 * 30 } : { maxAgeSeconds: undefined },
+  );
+}
+
+app.get("/api/rooms/:channelId", async (req, res, next) => {
   try {
     const data = await readChannels();
-    res.json(data.channels.map((channel) => ({ id: channel.id, name: channel.name })));
+    const channel = data.channels.find((item) => item.id === req.params.channelId);
+    if (!channel) {
+      res.status(404).send("That room link is not on tonight's board");
+      return;
+    }
+
+    res.json(roomSummary(channel));
   } catch (error) {
     next(error);
   }
@@ -224,13 +405,12 @@ app.get("/api/admin", async (req, res, next) => {
     const data = await readChannels();
     res.json(
       data.channels.map((channel) => ({
-        id: channel.id,
-        name: channel.name,
-        notice: channel.notice ?? "",
+        ...roomSummary(channel),
         users: channel.users.map((user) => ({
           id: user.id,
           nickname: user.nickname,
-          password: decryptPasswordForAdminCopy(user.encryptedPassword),
+          ...(user.avatar ? { avatar: user.avatar } : {}),
+          online: isUserOnline(channel.id, user.id),
         })),
       })),
     );
@@ -258,8 +438,12 @@ app.get("/api/chat/:channelId", async (req, res, next) => {
     }
 
     res.json({
-      channel: { id: channel.id, name: channel.name, notice: channel.notice ?? "" },
-      user: { id: user.id, nickname: user.nickname },
+      channel: roomSummary(channel),
+      user: {
+        id: user.id,
+        nickname: user.nickname,
+        ...(user.avatar ? { avatar: user.avatar } : {}),
+      },
     });
   } catch (error) {
     next(error);
@@ -289,13 +473,14 @@ app.get("/api/session", async (req, res, next) => {
   }
 });
 
-app.post("/api/login", async (req, res, next) => {
+app.post("/api/join", async (req, res, next) => {
   try {
     if (rateLimitLogin(req, res)) return;
 
-    const result = await authenticateChatUser(
+    const result = await joinChannel(
       String(req.body.channelId ?? ""),
-      String(req.body.password ?? ""),
+      String(req.body.nickname ?? ""),
+      req.body.avatar,
     );
     if (!result.ok) {
       res.status(result.status).send(result.message);
@@ -303,18 +488,7 @@ app.post("/api/login", async (req, res, next) => {
     }
 
     const { channel, user } = result.value;
-    setSessionCookie(
-      res,
-      {
-        role: "user",
-        channelId: channel.id,
-        userId: user.id,
-        nickname: user.nickname,
-      },
-      String(req.body.remember ?? "") === "1"
-        ? { maxAgeSeconds: 60 * 60 * 24 * 30 }
-        : { maxAgeSeconds: undefined },
-    );
+    setUserSession(res, channel, user, String(req.body.remember ?? "") === "1");
     res.json({ redirectTo: `/chat/${encodeURIComponent(channel.id)}` });
   } catch (error) {
     next(error);
@@ -346,13 +520,17 @@ app.post("/api/admin/channels", async (req, res, next) => {
       return;
     }
 
-    const result = await createChannel(String(req.body.name ?? ""), String(req.body.notice ?? ""));
+    const result = await createChannel(
+      String(req.body.name ?? ""),
+      String(req.body.notice ?? ""),
+      req.body.maxSeats,
+    );
     if (!result.ok) {
       res.status(result.status).send(result.message);
       return;
     }
 
-    res.status(204).end();
+    res.status(201).json(roomSummary(result.value));
   } catch (error) {
     next(error);
   }
@@ -377,18 +555,14 @@ app.post("/api/admin/channels/:channelId/notice", async (req, res, next) => {
   }
 });
 
-app.post("/api/admin/channels/:channelId/users", async (req, res, next) => {
+app.post("/api/admin/channels/:channelId/max-seats", async (req, res, next) => {
   try {
     if (!isAdmin(req)) {
       res.status(403).send("The staff hatch needs a key");
       return;
     }
 
-    const result = await addChannelUser(
-      req.params.channelId,
-      String(req.body.nickname ?? ""),
-      String(req.body.password ?? ""),
-    );
+    const result = await updateChannelMaxSeats(req.params.channelId, req.body.maxSeats);
     if (!result.ok) {
       res.status(result.status).send(result.message);
       return;
@@ -440,13 +614,14 @@ app.delete("/api/admin/channels/:channelId/users/:userId", async (req, res, next
   }
 });
 
-app.post("/login", async (req, res, next) => {
+app.post("/join", async (req, res, next) => {
   try {
     if (rateLimitLogin(req, res)) return;
 
-    const result = await authenticateChatUser(
+    const result = await joinChannel(
       String(req.body.channelId ?? ""),
-      String(req.body.password ?? ""),
+      String(req.body.nickname ?? ""),
+      req.body.avatar,
     );
     if (!result.ok) {
       res.status(result.status).send(result.message);
@@ -454,12 +629,7 @@ app.post("/login", async (req, res, next) => {
     }
 
     const { channel, user } = result.value;
-    setSessionCookie(res, {
-      role: "user",
-      channelId: channel.id,
-      userId: user.id,
-      nickname: user.nickname,
-    });
+    setUserSession(res, channel, user, String(req.body.remember ?? "") === "1");
     res.redirect(`/chat/${encodeURIComponent(channel.id)}`);
   } catch (error) {
     next(error);
@@ -491,7 +661,11 @@ app.post("/admin/channels", async (req, res, next) => {
       return;
     }
 
-    const result = await createChannel(String(req.body.name ?? ""), String(req.body.notice ?? ""));
+    const result = await createChannel(
+      String(req.body.name ?? ""),
+      String(req.body.notice ?? ""),
+      req.body.maxSeats,
+    );
     if (!result.ok) {
       res.status(result.status).send(result.message);
       return;
@@ -522,18 +696,14 @@ app.post("/admin/channels/:channelId/notice", async (req, res, next) => {
   }
 });
 
-app.post("/admin/channels/:channelId/users", async (req, res, next) => {
+app.post("/admin/channels/:channelId/max-seats", async (req, res, next) => {
   try {
     if (!isAdmin(req)) {
       res.status(403).send("The staff hatch needs a key");
       return;
     }
 
-    const result = await addChannelUser(
-      req.params.channelId,
-      String(req.body.nickname ?? ""),
-      String(req.body.password ?? ""),
-    );
+    const result = await updateChannelMaxSeats(req.params.channelId, req.body.maxSeats);
     if (!result.ok) {
       res.status(result.status).send(result.message);
       return;
@@ -563,6 +733,12 @@ server.on("upgrade", async (req, socket, head) => {
   const user = channel?.users.find((item) => item.id === session.userId);
   if (!channel || !user) {
     socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+    socket.destroy();
+    return;
+  }
+
+  if (countOnline(channel.id, user.id) >= channel.maxSeats) {
+    socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
     socket.destroy();
     return;
   }
@@ -628,11 +804,15 @@ wss.on("connection", async (ws: AuthedSocket) => {
       return;
     }
 
+    const seated = (await readChannels()).channels
+      .find((item) => item.id === channelId)
+      ?.users.find((item) => item.id === userId);
     const message: ChatMessage = {
       type: "message",
       id: randomId("message"),
       userId,
       nickname,
+      avatar: resolvePatronFaceId(seated?.avatar),
       text,
       time: new Date().toISOString(),
     };

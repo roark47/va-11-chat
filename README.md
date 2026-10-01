@@ -29,12 +29,12 @@ freely without the product getting in the way.
 
 ## Features
 
-- Admin web page for creating channels and channel users
-- Password-based user login per channel
+- Admin web page for opening rooms with a shareable link and max seat limit
+- Guests join with a room link, a nickname, and one of eight original pixel faces — no per-user passwords
 - Real-time chat over the native WebSocket protocol
 - Automatic WebSocket reconnection and history recovery after network or app suspension
 - Channel-isolated messages
-- Nickname + message display
+- Nickname, pixel face beside the bubble, and message display. The face stays on the seat; each message keeps the face it was sent with
 - Browser notifications for messages from other users
 - Encrypted local message history with AES-256-GCM
 - Keeps the latest 100 messages per channel
@@ -44,13 +44,12 @@ freely without the product getting in the way.
 
 ## Home screen use
 
-On the first sign-in, users can keep their seat on the current device for 30 days. From the chat
+On the first join, users can keep their seat on the current device for 30 days. From the chat
 room, choose **Install app**; on iPhone, use **Add to Home Screen** from the system share sheet.
 Future launches from the home-screen icon validate the device session and open the last room
-directly, without requiring the room URL or password again.
+directly, without requiring the room URL again.
 
-The device session uses an `HttpOnly` cookie. Plaintext passwords are never stored in
-`localStorage`, and **Leave the seat** clears the session immediately.
+The device session uses an `HttpOnly` cookie. **Leave the seat** clears the session immediately.
 
 > Notifications currently require the page to remain active enough to receive WebSocket events.
 > Reliable notifications while the operating system fully suspends the app require a Web Push
@@ -81,7 +80,7 @@ ADMIN_PASSWORD=change-me COOKIE_SECRET=dev-cookie-secret MESSAGE_SECRET=dev-mess
 
 Open:
 
-- User login: <http://localhost:3000/>
+- App entry: <http://localhost:3000/>
 - Admin page: <http://localhost:3000/admin>
 
 ## Project Website
@@ -137,7 +136,7 @@ data/
     {channelId}.jsonl
 ```
 
-`channels.json` contains channel metadata, nicknames, and password hashes.
+`channels.json` contains channel metadata, seat limits, nicknames claimed in each room, and the pixel face on each seat.
 Message files contain encrypted JSONL records.
 
 If `INITIAL_CHANNELS_PATH` is set and `DATA_DIR/channels.json` does not exist,
@@ -162,7 +161,7 @@ Protect `MESSAGE_SECRET` like a database password.
 ## Security Notes
 
 - Production cookies use the `Secure` flag. Use HTTPS in production.
-- Login attempts are rate-limited in memory: 10 attempts per IP per 10 minutes.
+- Join and admin login attempts are rate-limited in memory: 10 attempts per IP per 10 minutes.
 - WebSocket messages are rate-limited in memory: 8 messages per user per 10 seconds.
 - Rate limits reset when the process restarts.
 - Rate limits are not shared across multiple instances.
@@ -196,7 +195,7 @@ docker compose up --build -d
 
 Open:
 
-- User login: <http://localhost:3000/>
+- App entry: <http://localhost:3000/>
 - Admin page: <http://localhost:3000/admin>
 
 Runtime data is stored in the `va-11-data` Docker volume, mounted at

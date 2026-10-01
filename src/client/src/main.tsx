@@ -32,17 +32,17 @@ function ThemeToggle() {
     }
   }, [theme]);
 
-  const isCyberpunk = theme === "cyberpunk";
+  const isNight = theme === "cyberpunk";
 
   return (
     <button
       className="theme-toggle"
       type="button"
-      aria-pressed={isCyberpunk}
-      aria-label={`Switch to ${isCyberpunk ? "minimal" : "cyberpunk"} theme`}
-      onClick={() => setTheme(isCyberpunk ? "minimal" : "cyberpunk")}
+      aria-pressed={isNight}
+      aria-label={`Switch to ${isNight ? "plain lights" : "night counter"} theme`}
+      onClick={() => setTheme(isNight ? "minimal" : "cyberpunk")}
     >
-      {isCyberpunk ? "Cyberpunk" : "Minimal"}
+      {isNight ? "Night counter" : "Plain lights"}
     </button>
   );
 }
@@ -79,7 +79,7 @@ function EntryPage() {
       <main className="form-page">
         <div className="form-page__content">
           <p className="form-page__status form-page__status--notice" role="status">
-            Finding your seat...
+            Warming a stool...
           </p>
         </div>
       </main>

@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Guests choose one of eight original pixel faces when they take a seat. The face stays on that
+  seat and appears beside each chat bubble. Messages from before a face was chosen use the
+  default portrait.
+
+### Changed
+
+- Room access is now link-based: hosts open a room with a max online seat limit, share the link,
+  and guests join with a nickname — per-user channel passwords are removed.
+
 ## [1.1.0] - 2026-07-22
 
 ### Added

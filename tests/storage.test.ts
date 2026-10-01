@@ -41,7 +41,7 @@ afterEach(() => {
 test("ensureDataFiles initializes channels from INITIAL_CHANNELS_PATH", async () => {
   const dataDir = await tempDir();
   const initialPath = path.join(dataDir, "initial.json");
-  const initialChannels: ChannelsFile = {
+  const initialChannels = {
     channels: [{ id: "room", name: "Room", users: [] }],
   };
   await fs.writeFile(initialPath, JSON.stringify(initialChannels));
@@ -49,17 +49,21 @@ test("ensureDataFiles initializes channels from INITIAL_CHANNELS_PATH", async ()
   const storage = await importStorage(dataDir, { INITIAL_CHANNELS_PATH: initialPath });
   await storage.ensureDataFiles();
 
-  assert.deepEqual(await storage.readChannels(), initialChannels);
-  assert.deepEqual(JSON.parse(await fs.readFile(path.join(dataDir, "channels.json"), "utf8")), {
-    channels: [{ id: "room", name: "Room", users: [] }],
-  });
+  const expected: ChannelsFile = {
+    channels: [{ id: "room", name: "Room", maxSeats: 8, users: [] }],
+  };
+  assert.deepEqual(await storage.readChannels(), expected);
+  assert.deepEqual(
+    JSON.parse(await fs.readFile(path.join(dataDir, "channels.json"), "utf8")),
+    expected,
+  );
 });
 
 test("writeChannels persists channel data after creating missing files", async () => {
   const dataDir = await tempDir();
   const storage = await importStorage(dataDir);
   const channels: ChannelsFile = {
-    channels: [{ id: "late-shift", name: "Late Shift", notice: "Open", users: [] }],
+    channels: [{ id: "late-shift", name: "Late Shift", notice: "Open", maxSeats: 12, users: [] }],
   };
 
   await storage.writeChannels(channels);
@@ -67,18 +71,39 @@ test("writeChannels persists channel data after creating missing files", async (
   assert.deepEqual(await storage.readChannels(), channels);
 });
 
-test("admin password copies are encrypted and only decrypt with the message secret", async () => {
+test("normalizeChannel strips legacy password fields and clamps maxSeats", async () => {
   const dataDir = await tempDir();
-  const storage = await importStorage(dataDir, { MESSAGE_SECRET: "first-secret" });
+  const storage = await importStorage(dataDir);
 
-  const encrypted = storage.encryptPasswordForAdminCopy("seat-password");
+  const normalized = storage.normalizeChannel({
+    id: "legacy",
+    name: "Legacy",
+    maxSeats: 999,
+    users: [
+      {
+        id: "user_1",
+        nickname: "Dana",
+        passwordHash: "scrypt:salt:hash",
+        encryptedPassword: "secret",
+        avatar: "not-a-face",
+      },
+      {
+        id: "user_2",
+        nickname: "Kai",
+        avatar: "hoop",
+      },
+    ],
+  });
 
-  assert.doesNotMatch(encrypted, /seat-password/);
-  assert.equal(storage.decryptPasswordForAdminCopy(encrypted), "seat-password");
-  assert.equal(storage.decryptPasswordForAdminCopy(undefined), null);
-
-  const otherSecretStorage = await importStorage(dataDir, { MESSAGE_SECRET: "second-secret" });
-  assert.equal(otherSecretStorage.decryptPasswordForAdminCopy(encrypted), null);
+  assert.deepEqual(normalized, {
+    id: "legacy",
+    name: "Legacy",
+    maxSeats: 50,
+    users: [
+      { id: "user_1", nickname: "Dana" },
+      { id: "user_2", nickname: "Kai", avatar: "hoop" },
+    ],
+  });
 });
 
 test("saveMessage stores encrypted history, trims old messages, and sanitizes channel filenames", async () => {

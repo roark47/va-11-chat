@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { resolvePatronFaceId } from "../../../../avatars";
 import { deleteResource, getJson, postForm } from "../../api";
 import type { AdminChannel } from "../../types";
 import { randomAvailableDrinkName } from "../../shared/drinks";
+import { PatronPortrait } from "../../shared/patron-portrait";
 import { AdminLoginPage } from "../admin-login/AdminLoginPage";
 import "../login/login-page.css";
 import "./admin-page.css";
@@ -30,10 +32,21 @@ type PendingConfirmation =
   | { type: "channel"; channelId: string; channelName: string }
   | { type: "user"; channelId: string; userId: string; nickname: string };
 
+type FreshKey = {
+  id: string;
+  name: string;
+};
+
+function roomLink(channelId: string): string {
+  return `${window.location.origin}/chat/${encodeURIComponent(channelId)}`;
+}
+
 function AdminPage({ channels, refresh }: AdminPageProps) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [channelName, setChannelName] = useState("");
+  const [freshKey, setFreshKey] = useState<FreshKey | null>(null);
+  const [expandedRoomId, setExpandedRoomId] = useState<string | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
 
   useEffect(() => {
@@ -52,34 +65,19 @@ function AdminPage({ channels, refresh }: AdminPageProps) {
     try {
       const formElement = event.currentTarget;
       const form = new FormData(formElement);
-      await postForm("/api/admin/channels", {
+      const created = await postForm<AdminChannel>("/api/admin/channels", {
         name: String(form.get("name") ?? ""),
         notice: String(form.get("notice") ?? ""),
+        maxSeats: String(form.get("maxSeats") ?? "8"),
       });
       setChannelName("");
       formElement.reset();
+      setFreshKey({ id: created.id, name: created.name });
+      setExpandedRoomId(null);
+      setNotice(`Hand them the key for ${created.name}`);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "The menu board would not take it");
-    }
-  }
-
-  async function addUser(event: React.FormEvent<HTMLFormElement>, channelId: string) {
-    event.preventDefault();
-    setError("");
-    setNotice("");
-
-    try {
-      const formElement = event.currentTarget;
-      const form = new FormData(formElement);
-      await postForm(`/api/admin/channels/${encodeURIComponent(channelId)}/users`, {
-        nickname: String(form.get("nickname") ?? ""),
-        password: String(form.get("password") ?? ""),
-      });
-      formElement.reset();
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "The guest list rejected the name");
     }
   }
 
@@ -100,15 +98,30 @@ function AdminPage({ channels, refresh }: AdminPageProps) {
     }
   }
 
-  async function copyPassword(password: string | null | undefined, nickname: string) {
-    if (!password) return;
+  async function updateMaxSeats(event: React.FormEvent<HTMLFormElement>, channelId: string) {
+    event.preventDefault();
     setError("");
+    setNotice("");
 
     try {
-      await navigator.clipboard.writeText(password);
-      setNotice(`${nickname}'s house password is on the clipboard`);
+      const form = new FormData(event.currentTarget);
+      await postForm(`/api/admin/channels/${encodeURIComponent(channelId)}/max-seats`, {
+        maxSeats: String(form.get("maxSeats") ?? ""),
+      });
+      setNotice("Seat limit updated");
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "The seat limit would not stick");
+    }
+  }
+
+  async function copyLink(channelId: string, channelName: string) {
+    setError("");
+    try {
+      await navigator.clipboard.writeText(roomLink(channelId));
+      setNotice(`${channelName}'s room key is on the clipboard`);
     } catch {
-      setError("The clipboard would not take the house password");
+      setError("The clipboard would not take the room link");
     }
   }
 
@@ -118,6 +131,8 @@ function AdminPage({ channels, refresh }: AdminPageProps) {
 
     try {
       await deleteResource(`/api/admin/channels/${encodeURIComponent(channelId)}`);
+      if (freshKey?.id === channelId) setFreshKey(null);
+      if (expandedRoomId === channelId) setExpandedRoomId(null);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "The board refused to lose that drink");
@@ -156,7 +171,7 @@ function AdminPage({ channels, refresh }: AdminPageProps) {
     pendingConfirmation?.type === "channel"
       ? `Strike ${pendingConfirmation.channelName} from tonight's board?`
       : pendingConfirmation
-        ? `Close ${pendingConfirmation.nickname}'s seat?`
+        ? `Clear ${pendingConfirmation.nickname}'s saved seat?`
         : "";
 
   return (
@@ -177,8 +192,37 @@ function AdminPage({ channels, refresh }: AdminPageProps) {
           </button>
         </form>
 
+        {freshKey && (
+          <section className="admin-page__key-panel" aria-labelledby="fresh-key-title">
+            <h2 className="admin-page__key-title" id="fresh-key-title">
+              Tonight&apos;s key
+            </h2>
+            <p className="admin-page__key-copy">
+              <strong>{freshKey.name}</strong> is open. Hand this link to anyone you want at the
+              counter — the link is the only key.
+            </p>
+            <code className="admin-page__key-link">{roomLink(freshKey.id)}</code>
+            <div className="admin-page__key-actions">
+              <button
+                className="form-page__button button--primary"
+                type="button"
+                onClick={() => copyLink(freshKey.id, freshKey.name)}
+              >
+                Copy the key
+              </button>
+              <button
+                className="form-page__button button--secondary"
+                type="button"
+                onClick={() => setFreshKey(null)}
+              >
+                Got it
+              </button>
+            </div>
+          </section>
+        )}
+
         <section className="admin-page__section">
-          <h2>Write a new order</h2>
+          <h2>Open a room</h2>
           <form className="form-page__form admin-page__create-form" onSubmit={createChannel}>
             <p className="form-page__field admin-page__create-field">
               <label className="form-page__label">
@@ -203,130 +247,180 @@ function AdminPage({ channels, refresh }: AdminPageProps) {
             </p>
             <p className="form-page__field">
               <label className="form-page__label">
-                Board note
+                Max seats (online)
+                <br />
+                <input
+                  className="form-page__control"
+                  name="maxSeats"
+                  type="number"
+                  min={2}
+                  max={50}
+                  defaultValue={8}
+                  required
+                />
+              </label>
+            </p>
+            <p className="form-page__field">
+              <label className="form-page__label">
+                Board note <span className="form-page__meta">(optional)</span>
                 <br />
                 <textarea
                   className="form-page__control admin-page__notice-control"
                   name="notice"
-                  rows={3}
+                  rows={2}
                 />
               </label>
             </p>
             <button className="form-page__button button--primary" type="submit">
-              Put it on the menu
+              Open the room
             </button>
           </form>
         </section>
 
         <section className="admin-page__section">
           <h2>Tonight&apos;s board</h2>
-          <ul className="admin-page__channel-list">
-            {channels.map((channel) => (
-              <li className="admin-page__channel-item" key={channel.id}>
-                <div className="admin-page__channel-header">
-                  <strong>{channel.name}</strong>
-                  <button
-                    className="admin-page__compact-button button--danger"
-                    type="button"
-                    onClick={() =>
-                      setPendingConfirmation({
-                        type: "channel",
-                        channelId: channel.id,
-                        channelName: channel.name,
-                      })
-                    }
+          {channels.length === 0 ? (
+            <p className="admin-page__empty">
+              No rooms yet. Open one above, then share tonight&apos;s key with your guests.
+            </p>
+          ) : (
+            <ul className="admin-page__channel-list">
+              {channels.map((channel) => {
+                const isExpanded = expandedRoomId === channel.id;
+                return (
+                  <li
+                    className={`admin-page__channel-item${
+                      freshKey?.id === channel.id ? " admin-page__channel-item--fresh" : ""
+                    }`}
+                    key={channel.id}
                   >
-                    Delete channel
-                  </button>
-                </div>
-                <form
-                  className="admin-page__notice-form"
-                  onSubmit={(event) => updateNotice(event, channel.id)}
-                >
-                  <p className="form-page__field">
-                    <label className="form-page__label">
-                      Board note
-                      <br />
-                      <textarea
-                        className="form-page__control admin-page__notice-control"
-                        name="notice"
-                        rows={3}
-                        defaultValue={channel.notice ?? ""}
-                      />
-                    </label>
-                  </p>
-                  <button className="admin-page__compact-button button--secondary" type="submit">
-                    Save note
-                  </button>
-                </form>
-                <ul className="admin-page__user-list">
-                  {channel.users.map((user) => (
-                    <li className="admin-page__user-item" key={user.id}>
-                      <span className="admin-page__user-name">{user.nickname}</span>
-                      <button
-                        className="admin-page__compact-button button--secondary"
-                        type="button"
-                        disabled={!user.password}
-                        title={
-                          user.password
-                            ? `Copy ${user.nickname}'s password`
-                            : "No saved password for this older guest"
-                        }
-                        onClick={() => copyPassword(user.password, user.nickname)}
-                      >
-                        Copy password
-                      </button>
+                    <div className="admin-page__channel-header">
+                      <strong>{channel.name}</strong>
                       <button
                         className="admin-page__compact-button button--danger"
                         type="button"
                         onClick={() =>
                           setPendingConfirmation({
-                            type: "user",
+                            type: "channel",
                             channelId: channel.id,
-                            userId: user.id,
-                            nickname: user.nickname,
+                            channelName: channel.name,
                           })
                         }
                       >
-                        Delete member
+                        Delete room
                       </button>
-                    </li>
-                  ))}
-                </ul>
-                <form
-                  className="admin-page__user-form"
-                  onSubmit={(event) => addUser(event, channel.id)}
-                >
-                  <p className="form-page__field">
-                    <label className="form-page__label">
-                      Guest handle
-                      <br />
-                      <input
-                        className="form-page__control admin-page__user-control"
-                        name="nickname"
-                        required
-                      />
-                    </label>
-                  </p>
-                  <p className="form-page__field">
-                    <label className="form-page__label">
-                      House password
-                      <br />
-                      <input
-                        className="form-page__control admin-page__user-control"
-                        name="password"
-                        type="password"
-                        required
-                      />
-                    </label>
-                  </p>
-                  <button className="form-page__button button--primary" type="submit">
-                    Seat this guest
-                  </button>
-                </form>
-              </li>
-            ))}
-          </ul>
+                    </div>
+                    <p className="admin-page__meta">
+                      {channel.onlineCount}/{channel.maxSeats} online
+                    </p>
+                    <div className="admin-page__link-row">
+                      <code className="admin-page__link">{roomLink(channel.id)}</code>
+                      <button
+                        className="admin-page__compact-button button--primary"
+                        type="button"
+                        onClick={() => copyLink(channel.id, channel.name)}
+                      >
+                        Copy key
+                      </button>
+                    </div>
+                    <button
+                      className="admin-page__compact-button button--secondary admin-page__more-toggle"
+                      type="button"
+                      aria-expanded={isExpanded}
+                      onClick={() => setExpandedRoomId(isExpanded ? null : channel.id)}
+                    >
+                      {isExpanded ? "Hide details" : "Seats, note & guests"}
+                    </button>
+                    {isExpanded && (
+                      <div className="admin-page__details">
+                        <form
+                          className="admin-page__notice-form"
+                          onSubmit={(event) => updateMaxSeats(event, channel.id)}
+                        >
+                          <p className="form-page__field admin-page__create-field">
+                            <label className="form-page__label">
+                              Max seats
+                              <br />
+                              <input
+                                className="form-page__control admin-page__user-control"
+                                name="maxSeats"
+                                type="number"
+                                min={2}
+                                max={50}
+                                defaultValue={channel.maxSeats}
+                                key={`${channel.id}-${channel.maxSeats}`}
+                                required
+                              />
+                            </label>
+                            <button
+                              className="admin-page__compact-button button--secondary"
+                              type="submit"
+                            >
+                              Save seats
+                            </button>
+                          </p>
+                        </form>
+                        <form
+                          className="admin-page__notice-form"
+                          onSubmit={(event) => updateNotice(event, channel.id)}
+                        >
+                          <p className="form-page__field">
+                            <label className="form-page__label">
+                              Board note
+                              <br />
+                              <textarea
+                                className="form-page__control admin-page__notice-control"
+                                name="notice"
+                                rows={3}
+                                defaultValue={channel.notice ?? ""}
+                              />
+                            </label>
+                          </p>
+                          <button
+                            className="admin-page__compact-button button--secondary"
+                            type="submit"
+                          >
+                            Save note
+                          </button>
+                        </form>
+                        {channel.users.length > 0 ? (
+                          <ul className="admin-page__user-list">
+                            {channel.users.map((user) => (
+                              <li className="admin-page__user-item" key={user.id}>
+                                <span className="admin-page__user-name">
+                                  <span className="patron-frame patron-frame--seat">
+                                    <PatronPortrait face={resolvePatronFaceId(user.avatar)} />
+                                  </span>
+                                  {user.nickname}
+                                  {user.online ? " · online" : ""}
+                                </span>
+                                <button
+                                  className="admin-page__compact-button button--danger"
+                                  type="button"
+                                  onClick={() =>
+                                    setPendingConfirmation({
+                                      type: "user",
+                                      channelId: channel.id,
+                                      userId: user.id,
+                                      nickname: user.nickname,
+                                    })
+                                  }
+                                >
+                                  Clear seat
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="admin-page__meta">No guests have sat down yet.</p>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </section>
 
         <p className="form-page__link-row">

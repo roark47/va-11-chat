@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="VA-11 Chat is a small WebSocket chat room for relaxed, candid conversation."
+      content="VA-11 Chat: a small self-hosted room for late-night talk. Invite a few people, chat, leave. No archive."
     />
     <title>VA-11 Chat</title>
     <link rel="icon" type="image/png" href="./assets/favicon.png" />
@@ -18,106 +18,120 @@
         <span>VA-11 Chat</span>
       </a>
       <nav class="site-nav" aria-label="Primary navigation">
-        <a href="#features">Features</a>
-        <a href="#docs">Docs</a>
-        <a href="#deploy">Deploy</a>
+        <a href="#room">The room</a>
+        <a href="#docs">Start</a>
+        <a href="#deploy">Host</a>
       </nav>
     </header>
 
     <main id="top">
       <section class="hero">
         <div class="hero__copy">
-          <p class="eyebrow">small-room websocket chat</p>
           <h1>VA-11 Chat</h1>
           <p>
-            A quiet, self-hosted chat room for people who want a place to slow down, speak plainly,
-            and keep the interface out of the conversation.
+            A late-shift corner for a handful of people and one topic. Self-hosted, quiet, and built
+            to leave no residue: open the room, talk freely, walk out.
           </p>
           <div class="hero__actions" aria-label="Project links">
-            <a class="button button--primary" href="#features">Explore</a>
-            <a class="button" href="#docs">Start locally</a>
+            <a class="button button--primary" href="#docs">Open the room</a>
+            <a class="button" href="#bar">Why the bar</a>
           </div>
         </div>
-        <div class="hero__mark" aria-label="VA-11 Chat logo">
-          <img src="./assets/logo.png" alt="" />
+        <div class="hero__mark">
+          <img src="./assets/logo.png" alt="VA-11 Chat cocktail mark" />
         </div>
       </section>
 
-      <section class="band band--intro">
+      <section id="bar" class="band band--intro">
         <div class="content-grid">
-          <div>
-            <p class="eyebrow">why the name</p>
-            <h2>A place with bar-counter energy</h2>
-          </div>
+          <h2>Bar-counter energy, not a workspace</h2>
           <p>
-            VA-11 Chat takes inspiration from the mood of VA-11: late-night warmth, unhurried
-            messages, and a small venue where people can say what they mean. The app keeps the stack
-            simple so the room stays easy to understand, run, and trust.
+            Named for the mood of VA-11: neon over a small counter, unhurried messages, a place where
+            ordinary talk can turn honest. The stack stays simple so the room stays easy to run and
+            trust — never a feature-heavy chat platform.
           </p>
         </div>
       </section>
 
-      <section id="features" class="section">
-        <div class="section__heading">
-          <p class="eyebrow">what it does</p>
-          <h2>Focused on the room, not the machinery</h2>
-        </div>
-        <div class="feature-grid">
-          <article>
-            <h3>Channel rooms</h3>
-            <p>Create channels and per-channel users from a small admin page.</p>
-          </article>
-          <article>
-            <h3>Native realtime chat</h3>
-            <p>Messages move over WebSocket connections without a hosted database.</p>
-          </article>
-          <article>
-            <h3>Encrypted history</h3>
-            <p>Recent messages are encrypted at rest with AES-256-GCM.</p>
-          </article>
-          <article>
-            <h3>Small deployment</h3>
-            <p>Run one Node.js process with local JSON and JSONL storage.</p>
-          </article>
+      <section id="room" class="section">
+        <div class="room">
+          <div class="room__lead">
+            <h2>Built for tonight’s booth</h2>
+            <p>
+              Invite a few people with a room link. They pick a nickname and one of eight pixel
+              faces, talk in realtime, then leave. The product stance is chat-and-go: not an
+              archive, not a social graph.
+            </p>
+          </div>
+          <ul class="room__list">
+            <li>
+              <strong>Small rooms</strong>
+              <span>Spin up a channel and seats from a tiny admin page, enough for one topic.</span>
+            </li>
+            <li>
+              <strong>Live talk</strong>
+              <span>Messages move over the wire as they happen. No hosted database in the middle.</span>
+            </li>
+            <li>
+              <strong>A face at the counter</strong>
+              <span>
+                Sit down as one of eight original pixel portraits. That face stays on the seat and
+                beside each bubble.
+              </span>
+            </li>
+            <li>
+              <strong>Leaves lightly</strong>
+              <span>
+                Only a short local cushion stays on disk, encrypted — not a cloud transcript you keep
+                forever.
+              </span>
+            </li>
+            <li>
+              <strong>One process</strong>
+              <span>Run a single Node host with local files. Easy to understand, easy to shut down.</span>
+            </li>
+          </ul>
         </div>
       </section>
 
       <section id="docs" class="band">
         <div class="section__heading">
-          <p class="eyebrow">basic docs</p>
-          <h2>Run it locally</h2>
+          <h2>Open a room on your machine</h2>
+          <p class="section__lead">
+            For local nights only. Change every secret before you put this on a public host.
+          </p>
         </div>
-        <div class="terminal">
+        <div class="terminal" tabindex="0" aria-label="Install and start commands">
           <pre><code>npm install
 cp .env.example .env
-ADMIN_PASSWORD=change-me COOKIE_SECRET=dev-cookie-secret MESSAGE_SECRET=dev-message-secret npm run dev</code></pre>
+# Replace these before production; they are placeholders
+ADMIN_PASSWORD=change-me \
+COOKIE_SECRET=dev-cookie-secret \
+MESSAGE_SECRET=dev-message-secret \
+npm run dev</code></pre>
         </div>
         <div class="doc-grid">
           <div>
-            <h3>Open</h3>
-            <p>User login: <code>http://localhost:3000/</code></p>
-            <p>Admin page: <code>http://localhost:3000/admin</code></p>
+            <h3>Walk in</h3>
+            <p>Guest door: <code>http://localhost:3000/</code></p>
+            <p>Owner counter: <code>http://localhost:3000/admin</code></p>
           </div>
           <div>
-            <h3>Configure</h3>
+            <h3>Lock the doors</h3>
             <p>
-              Set <code>ADMIN_PASSWORD</code>, <code>COOKIE_SECRET</code>, and
-              <code>MESSAGE_SECRET</code> before production use.
+              Set real values for <code>ADMIN_PASSWORD</code>, <code>COOKIE_SECRET</code>, and
+              <code>MESSAGE_SECRET</code> before anyone outside your laptop can reach the room.
             </p>
           </div>
         </div>
       </section>
 
-      <section id="deploy" class="section">
-        <div class="content-grid">
-          <div>
-            <p class="eyebrow">deployment</p>
-            <h2>Use a long-running Node host</h2>
-          </div>
+      <section id="deploy" class="section section--tight">
+        <div class="content-grid content-grid--tight">
+          <h2>Hosting note</h2>
           <p>
-            VA-11 Chat uses native WebSockets, so deploy it to a platform that supports persistent
-            Node.js processes, such as a VPS or Render. If you keep local file storage in
-            production, attach persistent disk storage and run a single instance.
+            Needs a long-running Node process (VPS, Render, and similar). Keep one instance and
+            attach disk if you use local files. Most nights, localhost is enough.
           </p>
         </div>
       </section>
@@ -125,8 +139,9 @@ ADMIN_PASSWORD=change-me COOKIE_SECRET=dev-cookie-secret MESSAGE_SECRET=dev-mess
 
     <footer class="site-footer">
       <span>VA-11 Chat</span>
-      <a href="#docs">Docs</a>
-      <a href="#deploy">Deploy</a>
+      <a href="#docs">Start</a>
+      <a href="https://github.com/lbfsc/va-11">GitHub</a>
+      <a href="https://github.com/lbfsc/va-11/blob/main/LICENSE">MIT</a>
     </footer>
   </body>
 </html>

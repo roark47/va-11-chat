@@ -1,16 +1,17 @@
 import type { WebSocket } from "ws";
+import type { PatronFaceId } from "./avatars.js";
 
 export type StoredUser = {
   id: string;
   nickname: string;
-  passwordHash: string;
-  encryptedPassword?: string;
+  avatar?: PatronFaceId;
 };
 
 export type StoredChannel = {
   id: string;
   name: string;
   notice?: string;
+  maxSeats: number;
   users: StoredUser[];
 };
 
@@ -30,6 +31,7 @@ export type ChatMessage = {
   id?: string;
   userId: string;
   nickname: string;
+  avatar?: PatronFaceId;
   text: string;
   time: string;
 };

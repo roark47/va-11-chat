@@ -13,13 +13,12 @@ test("chat domain types require the fields used by storage and sessions", () => 
   expectTypeOf<StoredUser>().toMatchTypeOf<{
     id: string;
     nickname: string;
-    passwordHash: string;
-    encryptedPassword?: string;
   }>();
   expectTypeOf<StoredChannel>().toMatchTypeOf<{
     id: string;
     name: string;
     notice?: string;
+    maxSeats: number;
     users: StoredUser[];
   }>();
   expectTypeOf<ChannelsFile>().toMatchTypeOf<{ channels: StoredChannel[] }>();

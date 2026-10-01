@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { resolvePatronFaceId } from "../../../../avatars";
 import { getJson } from "../../api";
 import type { ChatMessage, ChatSession } from "../../types";
+import { PatronPortrait } from "../../shared/patron-portrait";
 import {
   initialNotificationsEnabled,
   notifyIncomingMessage,
@@ -8,6 +10,7 @@ import {
   saveNotificationPreference,
 } from "../../shared/notifications";
 import { InstallAppButton } from "../../shared/pwa";
+import { speakerToneStyle } from "../../shared/speaker-color";
 import { LoginPage } from "../login/LoginPage";
 import "./chat-page.css";
 
@@ -23,6 +26,10 @@ function messageKey(message: ChatMessage): string {
   return message.id ?? `${message.time}:${message.userId}:${message.text}`;
 }
 
+function withFace(message: ChatMessage): ChatMessage {
+  return { ...message, avatar: resolvePatronFaceId(message.avatar) };
+}
+
 export function ChatPage({ channelId }: ChatPageProps) {
   const [session, setSession] = useState<ChatSession | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
@@ -32,9 +39,11 @@ export function ChatPage({ channelId }: ChatPageProps) {
   const [notificationsEnabled, setNotificationsEnabled] = useState(() =>
     initialNotificationsEnabled(),
   );
+  const [moreOpen, setMoreOpen] = useState(false);
   const socketRef = useRef<WebSocket | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const messagesRef = useRef<HTMLDivElement | null>(null);
+  const moreRef = useRef<HTMLDivElement | null>(null);
   const notificationsEnabledRef = useRef(notificationsEnabled);
 
   useEffect(() => {
@@ -103,7 +112,7 @@ export function ChatPage({ channelId }: ChatPageProps) {
         }
 
         if (payload.type === "history" && Array.isArray(payload.messages)) {
-          setMessages(payload.messages);
+          setMessages(payload.messages.map(withFace));
         }
         if (
           payload.type === "message" &&
@@ -112,7 +121,7 @@ export function ChatPage({ channelId }: ChatPageProps) {
           typeof payload.text === "string" &&
           typeof payload.time === "string"
         ) {
-          const message = payload as ChatMessage;
+          const message = withFace(payload as ChatMessage);
           setMessages((currentMessages) =>
             currentMessages.some((item) => messageKey(item) === messageKey(message))
               ? currentMessages
@@ -178,6 +187,27 @@ export function ChatPage({ channelId }: ChatPageProps) {
     messagesElement.scrollTop = messagesElement.scrollHeight;
   }, [messages.length]);
 
+  useEffect(() => {
+    if (!moreOpen) return;
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!moreRef.current?.contains(event.target as Node)) {
+        setMoreOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setMoreOpen(false);
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [moreOpen]);
+
   const title = session?.channel.name ?? "Pouring the order";
   const channelNotice = session?.channel.notice?.trim() ?? "";
   const patron = session?.user.nickname ?? "";
@@ -238,52 +268,89 @@ export function ChatPage({ channelId }: ChatPageProps) {
 
   return (
     <main className="chat-page">
-      <h1 className="chat-page__title">{title}</h1>
+      <header className="chat-page__header">
+        <div className="chat-page__heading">
+          <h1 className="chat-page__title">{title}</h1>
+          {patron ? (
+            <p className="chat-page__patron">
+              <span className="patron-frame patron-frame--seat">
+                <PatronPortrait face={resolvePatronFaceId(session?.user.avatar)} />
+              </span>
+              Seated as {patron}
+            </p>
+          ) : null}
+        </div>
+        <div className="chat-page__toolbar">
+          <span
+            className={`chat-page__connection chat-page__connection--${connectionState}`}
+            role="status"
+            aria-live="polite"
+          >
+            {connectionLabel}
+          </span>
+          <div className="chat-page__more" ref={moreRef}>
+            <button
+              className="chat-page__more-toggle button--secondary"
+              type="button"
+              aria-expanded={moreOpen}
+              aria-haspopup="menu"
+              onClick={() => setMoreOpen((current) => !current)}
+            >
+              More
+            </button>
+            {moreOpen ? (
+              <div className="chat-page__more-menu" role="menu">
+                <div className="chat-page__more-item" role="none">
+                  <InstallAppButton />
+                </div>
+                <label className="chat-page__more-item" role="menuitemcheckbox">
+                  <input
+                    type="checkbox"
+                    checked={notificationsEnabled}
+                    disabled={!("Notification" in window) || Notification.permission === "denied"}
+                    onChange={toggleNotifications}
+                  />{" "}
+                  Soft bell for new pours
+                </label>
+              </div>
+            ) : null}
+          </div>
+          <form method="post" action="/logout">
+            <button className="button--secondary" type="submit">
+              Leave the seat
+            </button>
+          </form>
+        </div>
+      </header>
       {channelNotice && <p className="chat-page__notice">{channelNotice}</p>}
-      <div className="chat-page__toolbar">
-        <span
-          className={`chat-page__connection chat-page__connection--${connectionState}`}
-          role="status"
-          aria-live="polite"
-        >
-          {connectionLabel}
-        </span>
-        <InstallAppButton />
-        <label className="chat-page__toolbar-item">
-          <input
-            type="checkbox"
-            checked={notificationsEnabled}
-            disabled={!("Notification" in window) || Notification.permission === "denied"}
-            onChange={toggleNotifications}
-          />{" "}
-          Wake the bell
-        </label>
-        {patron && <span className="chat-page__toolbar-item">Guest: {patron}</span>}
-        <form className="chat-page__toolbar-item" method="post" action="/logout">
-          <button className="button--secondary" type="submit">
-            Leave the seat
-          </button>
-        </form>
-      </div>
       {error && <p className="chat-page__error">{error}</p>}
       <hr />
       <div className="chat-page__messages" ref={messagesRef}>
-        {visibleMessages.map((message) => (
-          <article
-            className={`chat-page__message ${
-              message.userId === currentUserId
-                ? "chat-page__message--own"
-                : "chat-page__message--other"
-            }`}
-            key={`${message.time}-${message.userId}-${message.text}`}
-          >
-            <header className="chat-page__message-header">
-              <time dateTime={message.time}>{new Date(message.time).toLocaleTimeString()}</time>
-              <strong>{message.nickname}</strong>
-            </header>
-            <p className="chat-page__message-text">{message.text}</p>
-          </article>
-        ))}
+        {visibleMessages.map((message) => {
+          const own = message.userId === currentUserId;
+          return (
+            <div
+              className={`chat-page__turn ${own ? "chat-page__turn--own" : "chat-page__turn--other"}`}
+              key={`${message.time}-${message.userId}-${message.text}`}
+            >
+              <span className="patron-frame patron-frame--bubble">
+                <PatronPortrait face={resolvePatronFaceId(message.avatar)} />
+              </span>
+              <article
+                className={`chat-page__message ${
+                  own ? "chat-page__message--own" : "chat-page__message--other"
+                }`}
+                style={speakerToneStyle(message.userId) as CSSProperties}
+              >
+                <header className="chat-page__message-header">
+                  <time dateTime={message.time}>{new Date(message.time).toLocaleTimeString()}</time>
+                  <strong className="chat-page__speaker">{message.nickname}</strong>
+                </header>
+                <p className="chat-page__message-text">{message.text}</p>
+              </article>
+            </div>
+          );
+        })}
       </div>
       <form className="chat-page__composer" onSubmit={submit}>
         <p className="chat-page__composer-row">
@@ -297,6 +364,9 @@ export function ChatPage({ channelId }: ChatPageProps) {
             required
             placeholder="Say it across the counter..."
           />
+          <button className="chat-page__send button--primary" type="submit">
+            Pour
+          </button>
         </p>
       </form>
     </main>

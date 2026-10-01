@@ -7,5 +7,5 @@
     "noEmit": true,
     "types": ["vite/client"]
   },
-  "include": ["src/client/**/*.ts", "src/client/**/*.tsx"]
+  "include": ["src/avatars.ts", "src/client/**/*.ts", "src/client/**/*.tsx"]
 }

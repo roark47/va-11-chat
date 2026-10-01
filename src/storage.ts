@@ -3,12 +3,58 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import {
   channelsPath,
+  defaultMaxSeats,
   initialChannelsPath,
   maxHistoryMessages,
+  maxMaxSeats,
   messageSecret,
   messagesDir,
+  minMaxSeats,
 } from "./config.js";
-import type { ChannelsFile, ChatMessage } from "./types.js";
+import { isPatronFaceId } from "./avatars.js";
+import type { ChannelsFile, ChatMessage, StoredChannel, StoredUser } from "./types.js";
+
+function clampMaxSeats(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return defaultMaxSeats;
+  return Math.min(maxMaxSeats, Math.max(minMaxSeats, Math.trunc(n)));
+}
+
+function normalizeUser(raw: Partial<StoredUser> & { passwordHash?: string }): StoredUser | null {
+  if (typeof raw.id !== "string" || typeof raw.nickname !== "string") return null;
+  return {
+    id: raw.id,
+    nickname: raw.nickname,
+    ...(isPatronFaceId(raw.avatar) ? { avatar: raw.avatar } : {}),
+  };
+}
+
+export function normalizeChannel(
+  raw: Partial<StoredChannel> & Record<string, unknown>,
+): StoredChannel {
+  const users = Array.isArray(raw.users)
+    ? raw.users
+        .map((user) => normalizeUser(user as Partial<StoredUser> & { passwordHash?: string }))
+        .filter((user): user is StoredUser => user !== null)
+    : [];
+
+  return {
+    id: String(raw.id ?? ""),
+    name: String(raw.name ?? ""),
+    ...(typeof raw.notice === "string" && raw.notice.trim() ? { notice: raw.notice } : {}),
+    maxSeats: clampMaxSeats(raw.maxSeats ?? defaultMaxSeats),
+    users,
+  };
+}
+
+function normalizeChannelsFile(raw: { channels?: unknown }): ChannelsFile {
+  const channels = Array.isArray(raw.channels)
+    ? raw.channels.map((channel) =>
+        normalizeChannel(channel as Partial<StoredChannel> & Record<string, unknown>),
+      )
+    : [];
+  return { channels };
+}
 
 export async function ensureDataFiles(): Promise<void> {
   await fs.mkdir(messagesDir, { recursive: true });
@@ -16,9 +62,9 @@ export async function ensureDataFiles(): Promise<void> {
     await fs.access(channelsPath);
   } catch {
     if (initialChannelsPath) {
-      const initialChannels = JSON.parse(
-        await fs.readFile(initialChannelsPath, "utf8"),
-      ) as ChannelsFile;
+      const initialChannels = normalizeChannelsFile(
+        JSON.parse(await fs.readFile(initialChannelsPath, "utf8")) as { channels?: unknown },
+      );
       await fs.writeFile(channelsPath, JSON.stringify(initialChannels, null, 2));
       return;
     }
@@ -30,12 +76,13 @@ export async function ensureDataFiles(): Promise<void> {
 export async function readChannels(): Promise<ChannelsFile> {
   await ensureDataFiles();
   const raw = await fs.readFile(channelsPath, "utf8");
-  return JSON.parse(raw) as ChannelsFile;
+  return normalizeChannelsFile(JSON.parse(raw) as { channels?: unknown });
 }
 
 export async function writeChannels(data: ChannelsFile): Promise<void> {
   await ensureDataFiles();
-  await fs.writeFile(channelsPath, JSON.stringify(data, null, 2));
+  const normalized = normalizeChannelsFile(data);
+  await fs.writeFile(channelsPath, JSON.stringify(normalized, null, 2));
 }
 
 function messageEncryptionKey(): Buffer {
@@ -94,16 +141,6 @@ function decryptJson<T>(line: string): T | null {
 
 function encryptMessage(message: ChatMessage): string {
   return encryptJson(message);
-}
-
-export function encryptPasswordForAdminCopy(password: string): string {
-  return encryptJson({ password });
-}
-
-export function decryptPasswordForAdminCopy(encryptedPassword: string | undefined): string | null {
-  if (!encryptedPassword) return null;
-  const payload = decryptJson<{ password?: unknown }>(encryptedPassword);
-  return typeof payload?.password === "string" ? payload.password : null;
 }
 
 function isEncryptedMessageLine(line: string): boolean {

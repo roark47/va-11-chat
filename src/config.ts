@@ -27,6 +27,11 @@ export const loginRateLimitMax = 10;
 export const messageRateLimitWindowMs = 10 * 1000;
 export const messageRateLimitMax = 8;
 
+export const defaultMaxSeats = 8;
+export const minMaxSeats = 2;
+export const maxMaxSeats = 50;
+export const maxNicknameLength = 24;
+
 export function requireProductionSecrets(): void {
   if (!isProduction) return;
 

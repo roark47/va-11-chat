@@ -1,16 +1,23 @@
+import type { PatronFaceId } from "../../avatars";
+
 export type ChannelSummary = {
   id: string;
   name: string;
   notice?: string;
+  maxSeats?: number;
+  onlineCount?: number;
 };
 
 export type AdminUser = {
   id: string;
   nickname: string;
-  password?: string | null;
+  avatar?: PatronFaceId;
+  online?: boolean;
 };
 
 export type AdminChannel = ChannelSummary & {
+  maxSeats: number;
+  onlineCount: number;
   users: AdminUser[];
 };
 
@@ -24,6 +31,7 @@ export type ChatMessage = {
   id?: string;
   userId: string;
   nickname: string;
+  avatar?: PatronFaceId;
   text: string;
   time: string;
 };

@@ -211,67 +211,102 @@ test("json api supports browser click actions", async () => {
   const createChannel = await postForm(
     baseUrl,
     "/api/admin/channels",
-    { name: "API Room", notice: "Mind the midnight tab." },
+    { name: "API Room", notice: "Mind the midnight tab.", maxSeats: "4" },
     adminCookie,
   );
-  assert.equal(createChannel.status, 204);
-
-  const addUser = await postForm(
-    baseUrl,
-    "/api/admin/channels/api-room/users",
-    { nickname: "Dana", password: "dana-pass" },
-    adminCookie,
-  );
-  assert.equal(addUser.status, 204);
+  assert.equal(createChannel.status, 201);
+  const created = (await createChannel.json()) as {
+    id: string;
+    name: string;
+    notice: string;
+    maxSeats: number;
+  };
+  assert.equal(created.name, "API Room");
+  assert.equal(created.notice, "Mind the midnight tab.");
+  assert.equal(created.maxSeats, 4);
+  assert.match(created.id, /^room_/);
 
   const adminState = await fetch(`${baseUrl}/api/admin`, { headers: { cookie: adminCookie } });
   assert.equal(adminState.status, 200);
   assert.equal(adminState.headers.get("cache-control"), "no-store");
   const adminStateJson = (await adminState.json()) as Array<{
+    id: string;
     name: string;
     notice: string;
-    users: Array<{ nickname: string; password: string | null }>;
+    maxSeats: number;
+    users: Array<{ nickname: string }>;
   }>;
   assert.equal(adminStateJson[0]?.name, "API Room");
   assert.equal(adminStateJson[0]?.notice, "Mind the midnight tab.");
-  assert.equal(adminStateJson[0]?.users[0]?.nickname, "Dana");
-  assert.equal(adminStateJson[0]?.users[0]?.password, "dana-pass");
+  assert.equal(adminStateJson[0]?.maxSeats, 4);
+  assert.deepEqual(adminStateJson[0]?.users, []);
 
   const storedChannels = await fs.readFile(path.join(dataDir, "channels.json"), "utf8");
-  assert.doesNotMatch(storedChannels, /dana-pass/);
+  assert.doesNotMatch(storedChannels, /passwordHash/);
 
-  const userLogin = await postForm(baseUrl, "/api/login", {
-    channelId: "api-room",
-    password: "dana-pass",
+  const roomLookup = await fetch(`${baseUrl}/api/rooms/${encodeURIComponent(created.id)}`);
+  assert.equal(roomLookup.status, 200);
+  assert.deepEqual(await roomLookup.json(), {
+    id: created.id,
+    name: "API Room",
+    notice: "Mind the midnight tab.",
+    maxSeats: 4,
+    onlineCount: 0,
+  });
+
+  const userJoin = await postForm(baseUrl, "/api/join", {
+    channelId: created.id,
+    nickname: "Dana",
     remember: "1",
   });
-  assert.equal(userLogin.status, 200);
-  assert.deepEqual(await userLogin.json(), { redirectTo: "/chat/api-room" });
-  assert.match(userLogin.headers.get("set-cookie") ?? "", /Max-Age=2592000/);
-  const userCookie = setCookieHeader(userLogin);
+  assert.equal(userJoin.status, 200);
+  assert.deepEqual(await userJoin.json(), { redirectTo: `/chat/${created.id}` });
+  assert.match(userJoin.headers.get("set-cookie") ?? "", /Max-Age=2592000/);
+  const userCookie = setCookieHeader(userJoin);
   assert.ok(userCookie);
 
   const resumedSession = await fetch(`${baseUrl}/api/session`, {
     headers: { cookie: userCookie },
   });
   assert.equal(resumedSession.status, 200);
-  assert.deepEqual(await resumedSession.json(), { redirectTo: "/chat/api-room" });
+  assert.deepEqual(await resumedSession.json(), { redirectTo: `/chat/${created.id}` });
 
-  const chatSession = await fetch(`${baseUrl}/api/chat/api-room`, {
+  const chatSession = await fetch(`${baseUrl}/api/chat/${encodeURIComponent(created.id)}`, {
     headers: { cookie: userCookie },
   });
   assert.equal(chatSession.status, 200);
   const chatSessionJson = (await chatSession.json()) as {
-    channel: { name: string; notice: string };
+    channel: { name: string; notice: string; maxSeats: number };
     user: { nickname: string };
   };
   assert.equal(chatSessionJson.channel.name, "API Room");
   assert.equal(chatSessionJson.channel.notice, "Mind the midnight tab.");
+  assert.equal(chatSessionJson.channel.maxSeats, 4);
   assert.equal(chatSessionJson.user.nickname, "Dana");
+
+  const reseat = await postForm(baseUrl, "/api/join", {
+    channelId: created.id,
+    nickname: "Dana",
+    avatar: "waves",
+  });
+  assert.equal(reseat.status, 200);
+  const reseated = await fetch(`${baseUrl}/api/chat/${encodeURIComponent(created.id)}`, {
+    headers: { cookie: userCookie },
+  });
+  const reseatedJson = (await reseated.json()) as { user: { avatar?: string } };
+  assert.equal(reseatedJson.user.avatar, "waves");
+
+  const badFace = await postForm(baseUrl, "/api/join", {
+    channelId: created.id,
+    nickname: "Quinn",
+    avatar: "jill",
+  });
+  assert.equal(badFace.status, 400);
+  assert.match(await badFace.text(), /faces at the counter/);
 
   const updateNotice = await postForm(
     baseUrl,
-    "/api/admin/channels/api-room/notice",
+    `/api/admin/channels/${encodeURIComponent(created.id)}/notice`,
     { notice: "" },
     adminCookie,
   );
@@ -284,7 +319,7 @@ test("json api supports browser click actions", async () => {
   assert.equal(updatedAdminStateJson[0]?.notice, "");
 });
 
-test("admin api deletes members and channels", async () => {
+test("admin api deletes seats and channels; join enforces seat limits", async () => {
   const { baseUrl } = await startServer();
 
   const adminLogin = await postForm(baseUrl, "/api/admin/login", { password: "test-admin" });
@@ -294,30 +329,55 @@ test("admin api deletes members and channels", async () => {
   const createChannel = await postForm(
     baseUrl,
     "/api/admin/channels",
-    { name: "Delete Room" },
+    { name: "Delete Room", maxSeats: "2" },
     adminCookie,
   );
-  assert.equal(createChannel.status, 204);
+  assert.equal(createChannel.status, 201);
+  const created = (await createChannel.json()) as { id: string; maxSeats: number };
+  assert.equal(created.maxSeats, 2);
 
-  const addUser = await postForm(
-    baseUrl,
-    "/api/admin/channels/delete-room/users",
-    { nickname: "Morgan", password: "morgan-pass" },
-    adminCookie,
-  );
-  assert.equal(addUser.status, 204);
+  const firstJoin = await postForm(baseUrl, "/api/join", {
+    channelId: created.id,
+    nickname: "Morgan",
+  });
+  assert.equal(firstJoin.status, 200);
+  const firstCookie = setCookieHeader(firstJoin);
+
+  const firstSocket = new WebSocket(`ws://127.0.0.1:${new URL(baseUrl).port}/ws`, {
+    headers: { cookie: firstCookie },
+  });
+  onTestFinished(() => firstSocket.close());
+  await waitForWebSocketMessage(firstSocket, (message) => message.type === "history");
+
+  const secondJoin = await postForm(baseUrl, "/api/join", {
+    channelId: created.id,
+    nickname: "Riley",
+  });
+  assert.equal(secondJoin.status, 200);
+  const secondCookie = setCookieHeader(secondJoin);
+  const secondSocket = new WebSocket(`ws://127.0.0.1:${new URL(baseUrl).port}/ws`, {
+    headers: { cookie: secondCookie },
+  });
+  onTestFinished(() => secondSocket.close());
+  await waitForWebSocketMessage(secondSocket, (message) => message.type === "history");
+
+  const fullJoin = await postForm(baseUrl, "/api/join", {
+    channelId: created.id,
+    nickname: "Casey",
+  });
+  assert.equal(fullJoin.status, 403);
+  assert.match(await fullJoin.text(), /full \(2\/2\)/);
 
   const adminState = await fetch(`${baseUrl}/api/admin`, { headers: { cookie: adminCookie } });
   const adminStateJson = (await adminState.json()) as Array<{
     id: string;
-    users: Array<{ id: string; nickname: string; password: string | null }>;
+    users: Array<{ id: string; nickname: string }>;
   }>;
-  const user = adminStateJson[0]?.users[0];
-  assert.equal(user?.nickname, "Morgan");
-  assert.equal(user?.password, "morgan-pass");
+  const user = adminStateJson[0]?.users.find((item) => item.nickname === "Morgan");
+  assert.ok(user);
 
   const deleteUser = await fetch(
-    `${baseUrl}/api/admin/channels/delete-room/users/${encodeURIComponent(user?.id ?? "")}`,
+    `${baseUrl}/api/admin/channels/${encodeURIComponent(created.id)}/users/${encodeURIComponent(user?.id ?? "")}`,
     {
       method: "DELETE",
       headers: { cookie: adminCookie },
@@ -325,20 +385,17 @@ test("admin api deletes members and channels", async () => {
   );
   assert.equal(deleteUser.status, 204);
 
-  const removedUserLogin = await postForm(baseUrl, "/api/login", {
-    channelId: "delete-room",
-    password: "morgan-pass",
-  });
-  assert.equal(removedUserLogin.status, 401);
-
-  const deleteChannel = await fetch(`${baseUrl}/api/admin/channels/delete-room`, {
-    method: "DELETE",
-    headers: { cookie: adminCookie },
-  });
+  const deleteChannel = await fetch(
+    `${baseUrl}/api/admin/channels/${encodeURIComponent(created.id)}`,
+    {
+      method: "DELETE",
+      headers: { cookie: adminCookie },
+    },
+  );
   assert.equal(deleteChannel.status, 204);
 
-  const channels = await fetch(`${baseUrl}/api/channels`);
-  assert.deepEqual(await channels.json(), []);
+  const missingRoom = await fetch(`${baseUrl}/api/rooms/${encodeURIComponent(created.id)}`);
+  assert.equal(missingRoom.status, 404);
 });
 
 test("seeds channels from INITIAL_CHANNELS_PATH when runtime channels file is missing", async () => {
@@ -363,16 +420,23 @@ test("seeds channels from INITIAL_CHANNELS_PATH when runtime channels file is mi
     INITIAL_CHANNELS_PATH: initialChannelsPath,
   });
 
-  const channels = await fetch(`${baseUrl}/api/channels`);
-  assert.equal(channels.status, 200);
-  assert.deepEqual(await channels.json(), [{ id: "seeded-room", name: "Seeded Room" }]);
+  const room = await fetch(`${baseUrl}/api/rooms/seeded-room`);
+  assert.equal(room.status, 200);
+  assert.deepEqual(await room.json(), {
+    id: "seeded-room",
+    name: "Seeded Room",
+    notice: "",
+    maxSeats: 8,
+    onlineCount: 0,
+  });
 
   const runtimeChannels = JSON.parse(
     await fs.readFile(path.join(dataDir, "channels.json"), "utf8"),
   ) as {
-    channels: Array<{ id: string }>;
+    channels: Array<{ id: string; maxSeats: number }>;
   };
   assert.equal(runtimeChannels.channels[0]?.id, "seeded-room");
+  assert.equal(runtimeChannels.channels[0]?.maxSeats, 8);
 });
 
 test("stores chat messages encrypted and reads them back through websocket history", async () => {
@@ -383,38 +447,32 @@ test("stores chat messages encrypted and reads them back through websocket histo
   const adminCookie = setCookieHeader(adminLogin);
   assert.ok(adminCookie);
 
-  assert.equal(
-    (await postForm(baseUrl, "/admin/channels", { name: "Secret Room" }, adminCookie)).status,
-    302,
+  const createChannel = await postForm(
+    baseUrl,
+    "/api/admin/channels",
+    { name: "Secret Room" },
+    adminCookie,
   );
-  assert.equal(
-    (
-      await postForm(
-        baseUrl,
-        "/admin/channels/secret-room/users",
-        { nickname: "Alice", password: "alice-pass" },
-        adminCookie,
-      )
-    ).status,
-    302,
-  );
+  assert.equal(createChannel.status, 201);
+  const created = (await createChannel.json()) as { id: string };
 
-  const userLogin = await postForm(baseUrl, "/login", {
-    channelId: "secret-room",
-    password: "alice-pass",
+  const userJoin = await postForm(baseUrl, "/join", {
+    channelId: created.id,
+    nickname: "Alice",
+    avatar: "hoop",
   });
-  assert.equal(userLogin.status, 302);
-  const userCookie = setCookieHeader(userLogin);
+  assert.equal(userJoin.status, 302);
+  const userCookie = setCookieHeader(userJoin);
   assert.ok(userCookie);
 
-  const chatPage = await fetch(`${baseUrl}/chat/secret-room`, {
+  const chatPage = await fetch(`${baseUrl}/chat/${encodeURIComponent(created.id)}`, {
     headers: { cookie: userCookie },
   });
   const chatHtml = await chatPage.text();
   assert.equal(chatPage.status, 200);
   assert.match(chatHtml, /<div id="root"><\/div>/);
 
-  const chatSession = await fetch(`${baseUrl}/api/chat/secret-room`, {
+  const chatSession = await fetch(`${baseUrl}/api/chat/${encodeURIComponent(created.id)}`, {
     headers: { cookie: userCookie },
   });
   assert.equal(chatSession.status, 200);
@@ -444,11 +502,12 @@ test("stores chat messages encrypted and reads them back through websocket histo
     (message) => message.type === "message" && message.text === plaintext,
   );
   assert.equal(broadcast.nickname, "Alice");
+  assert.equal(broadcast.avatar, "hoop");
   assert.match(String(broadcast.id), /^message_/);
   assert.equal(typeof broadcast.userId, "string");
   firstSocket.close();
 
-  const messageFile = path.join(dataDir, "messages", "secret-room.jsonl");
+  const messageFile = path.join(dataDir, "messages", `${created.id}.jsonl`);
   const encryptedFile = await fs.readFile(messageFile, "utf8");
   assert.doesNotMatch(encryptedFile, new RegExp(plaintext));
   assert.match(encryptedFile, /"alg":"aes-256-gcm"/);
@@ -464,11 +523,13 @@ test("stores chat messages encrypted and reads them back through websocket histo
   );
   const restoredMessages = restoredHistory.messages as Array<{
     nickname: string;
+    avatar: string;
     userId: string;
     text: string;
   }>;
   assert.equal(restoredMessages.length, 1);
   assert.equal(restoredMessages[0]?.nickname, "Alice");
+  assert.equal(restoredMessages[0]?.avatar, "hoop");
   assert.equal(restoredMessages[0]?.userId, broadcast.userId);
   assert.equal(restoredMessages[0]?.text, plaintext);
 });
@@ -500,27 +561,20 @@ test("rate-limits websocket messages", async () => {
 
   const adminLogin = await postForm(baseUrl, "/admin/login", { password: "test-admin" });
   const adminCookie = setCookieHeader(adminLogin);
-  assert.equal(
-    (await postForm(baseUrl, "/admin/channels", { name: "Rate Room" }, adminCookie)).status,
-    302,
+  const createChannel = await postForm(
+    baseUrl,
+    "/api/admin/channels",
+    { name: "Rate Room" },
+    adminCookie,
   );
-  assert.equal(
-    (
-      await postForm(
-        baseUrl,
-        "/admin/channels/rate-room/users",
-        { nickname: "Bob", password: "bob-pass" },
-        adminCookie,
-      )
-    ).status,
-    302,
-  );
+  assert.equal(createChannel.status, 201);
+  const created = (await createChannel.json()) as { id: string };
 
-  const userLogin = await postForm(baseUrl, "/login", {
-    channelId: "rate-room",
-    password: "bob-pass",
+  const userJoin = await postForm(baseUrl, "/join", {
+    channelId: created.id,
+    nickname: "Bob",
   });
-  const userCookie = setCookieHeader(userLogin);
+  const userCookie = setCookieHeader(userJoin);
   const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`, {
     headers: { cookie: userCookie },
   });
