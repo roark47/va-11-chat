@@ -11,8 +11,7 @@
   --pink: #ff6d9f;
   --amber: #ffc267;
   --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
-  --font-mono:
-    "SFMono-Regular", "SF Mono", "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+  --font-mono: "SFMono-Regular", "SF Mono", "Cascadia Mono", Consolas, "Liberation Mono", monospace;
   --shadow-neon: 0 0 22px rgba(104, 242, 237, 0.2);
   --shadow-pink: 0 0 22px rgba(255, 109, 159, 0.24);
   --radius-sm: 6px;
